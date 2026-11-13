@@ -1,0 +1,11 @@
+package com.smarthotel.hotel.service;
+import com.smarthotel.hotel.client.InventoryReadClient;import com.smarthotel.contract.InventoryReadContract.Query;import com.smarthotel.contract.InventoryReadContract.Snapshot;import com.smarthotel.exception.BusinessException;
+import org.junit.jupiter.api.Test;import java.time.LocalDate;import java.util.*;import java.util.stream.LongStream;
+import static org.mockito.Mockito.*;import static org.mockito.ArgumentMatchers.*;import static org.assertj.core.api.Assertions.*;
+class InventoryReadGatewayTest {
+ InventoryReadClient client=mock(InventoryReadClient.class);InventoryReadGateway service=new InventoryReadGateway(client,"test-token");LocalDate day=LocalDate.of(2030,1,1);
+ @Test void emptyIdsDoNotLoadAllInventory(){assertThat(service.queryMany(List.of(),day,day.plusDays(1))).isEmpty();verifyNoInteractions(client);}
+ @Test void batchesTypesAndDatesWithExclusiveEndAndOrderedReplies(){var calls=new ArrayList<Query>();when(client.query(anyString(),any())).thenAnswer(i->{Query q=i.getArgument(1);calls.add(q);var rows=new ArrayList<Snapshot>();for(Long id:q.ids()){var row=new Snapshot();row.setRoomTypeId(id);row.setInventoryDate(q.from());rows.add(row);}Collections.reverse(rows);return rows;});var result=service.queryMany(LongStream.rangeClosed(1,101).boxed().toList(),day,day.plusDays(370));assertThat(calls).hasSize(4);assertThat(calls.get(0).to()).isEqualTo(day.plusDays(366));assertThat(calls.get(1).from()).isEqualTo(day.plusDays(366));assertThat(result.get(0).getRoomTypeId()).isEqualTo(1);assertThat(result.get(1).getInventoryDate()).isEqualTo(day.plusDays(366));}
+ @Test void failureAfterFirstBatchCannotReturnPartialAvailability(){when(client.query(anyString(),any())).thenReturn(List.of()).thenThrow(new IllegalStateException("network"));assertThatThrownBy(()->service.queryMany(LongStream.rangeClosed(1,101).boxed().toList(),day,day.plusDays(1))).isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.getCode()).isEqualTo(503));}
+ @Test void missingUpstreamBodyDoesNotBecomeEmptyStock(){when(client.query(anyString(),any())).thenReturn(null);assertThatThrownBy(()->service.query(1L,day,day.plusDays(1))).isInstanceOf(BusinessException.class);}
+}

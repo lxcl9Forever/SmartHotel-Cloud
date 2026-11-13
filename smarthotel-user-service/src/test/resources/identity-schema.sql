@@ -1,0 +1,4 @@
+CREATE TABLE sys_role(role_id BIGINT AUTO_INCREMENT PRIMARY KEY,role_code VARCHAR(30),role_name VARCHAR(50),description VARCHAR(255),status INT DEFAULT 1,create_time TIMESTAMP,update_time TIMESTAMP);
+INSERT INTO sys_role(role_id,role_code,role_name) VALUES(1,'CUSTOMER','Customer'),(2,'STAFF','Staff'),(3,'ADMIN','Admin');
+CREATE TABLE sys_user(user_id BIGINT AUTO_INCREMENT PRIMARY KEY,username VARCHAR(50) UNIQUE,password VARCHAR(255),role_id BIGINT,nickname VARCHAR(50),phone VARCHAR(20) UNIQUE,avatar_url VARCHAR(255),status VARCHAR(20),last_login_time TIMESTAMP,create_time TIMESTAMP,update_time TIMESTAMP);
+CREATE TABLE customer(customer_id BIGINT AUTO_INCREMENT PRIMARY KEY,user_id BIGINT,customer_name VARCHAR(50),phone VARCHAR(20),id_type VARCHAR(20),id_number VARCHAR(50),gender VARCHAR(20),birthday DATE,level_id BIGINT,status VARCHAR(20),register_source VARCHAR(20),create_time TIMESTAMP,update_time TIMESTAMP);

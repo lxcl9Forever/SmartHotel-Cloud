@@ -1,0 +1,36 @@
+# Standalone dependency deployment; package with database/ and the generated .env.
+name: smarthotel-cloud-ubuntu
+services:
+  mysql:
+    image: mysql:8.0.44
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: smart_hotel_cloud
+      MYSQL_USER: smarthotel
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Missing MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Missing MYSQL_ROOT_PASSWORD}
+    ports: ["${DEPENDENCY_BIND_ADDRESS:?Set the Ubuntu VM IPv4 address}:13306:3306"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u smarthotel -e 'SELECT 1' smart_hotel_cloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis:7.4.7
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Missing REDIS_PASSWORD}
+    command: ["sh", "-c", 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    ports: ["${DEPENDENCY_BIND_ADDRESS:?Set the Ubuntu VM IPv4 address}:16379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  mysql-data:
+  redis-data:

@@ -1,0 +1,27 @@
+**/target/
+**/node_modules/
+**/dist/
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+**/application-local.yml
+*.log
+.run/
+*.pem
+*.key
+*.p12
+*.tar
+
+# Local archives, diagnostics and credentials
+*.zip
+*.bak
+*.dump
+*.sql.gz
+*.hprof
+*.pid
+*.pfx
+*.jks
+.DS_Store
+Thumbs.db

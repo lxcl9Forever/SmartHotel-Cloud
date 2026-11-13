@@ -1,0 +1,162 @@
+name: smarthotel-cloud
+x-backend-env: &backend-env
+  SERVER_ADDRESS: 0.0.0.0
+  REDIS_HOST: redis
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Set INTERNAL_TOKEN in .env}
+services:
+  mysql:
+    image: mysql:8.0.44
+    environment:
+      MYSQL_DATABASE: smart_hotel_cloud
+      MYSQL_USER: smarthotel
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    ports: ["127.0.0.1:${MYSQL_PUBLISH_PORT:-13306}:3306"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u smarthotel -e 'SELECT 1' smart_hotel_cloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis:7.4.7
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["sh", "-c", 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    ports: ["127.0.0.1:${REDIS_PUBLISH_PORT:-16379}:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  user:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-user-service}
+    environment:
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${USER_MYSQL_DATABASE:-smart_hotel_user}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${USER_MYSQL_USER:-sh_user_app}
+      MYSQL_PASSWORD: ${USER_MYSQL_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8081; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  inventory:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-inventory-service}
+    environment:
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${INVENTORY_MYSQL_DATABASE:-smart_hotel_inventory}?serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      HOTEL_SERVICE_URL: http://hotel:8083
+      MYSQL_USER: ${INVENTORY_MYSQL_USER:-sh_inventory_domain}
+      MYSQL_PASSWORD: ${INVENTORY_MYSQL_PASSWORD:-}
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8084; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  business:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-business-service}
+    environment:
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${BUSINESS_MYSQL_DATABASE:-smart_hotel_business}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${BUSINESS_MYSQL_USER:-sh_business_app}
+      MYSQL_PASSWORD: ${BUSINESS_MYSQL_PASSWORD:-}
+      USER_SERVICE_URL: http://user:8081
+      HOTEL_SERVICE_URL: http://hotel:8083
+      INVENTORY_MODE: remote
+      INVENTORY_SERVICE_URL: http://inventory:8084
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      user: {condition: service_healthy}
+      inventory: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8082; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  hotel:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-hotel-service}
+    environment:
+      SERVER_ADDRESS: 0.0.0.0
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      MYSQL_URL: jdbc:mysql://mysql:3306/${HOTEL_MYSQL_DATABASE:-smart_hotel_hotel}?serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      INVENTORY_SERVICE_URL: http://inventory:8084
+      MYSQL_USER: ${HOTEL_MYSQL_USER:-sh_hotel_domain}
+      MYSQL_PASSWORD: ${HOTEL_MYSQL_PASSWORD:-}
+    depends_on:
+      mysql: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8083; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-gateway}
+    environment:
+      SERVER_ADDRESS: 0.0.0.0
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      USER_SERVICE_URI: http://user:8081
+      BUSINESS_SERVICE_URI: http://business:8082
+      HOTEL_SERVICE_URI: http://hotel:8083
+    ports: ["127.0.0.1:${GATEWAY_PUBLISH_PORT:-8080}:8080"]
+    depends_on:
+      user: {condition: service_healthy}
+      business: {condition: service_healthy}
+      hotel: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.frontend
+    ports: ["127.0.0.1:${FRONTEND_PUBLISH_PORT:-8088}:80"]
+    depends_on:
+      gateway: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+volumes:
+  mysql-data:
+  redis-data:

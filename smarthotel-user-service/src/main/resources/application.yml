@@ -1,0 +1,46 @@
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8081}
+  forward-headers-strategy: none
+spring:
+  application:
+    name: smarthotel-user-service
+  datasource:
+    hikari:
+      # DATETIME defaults and SQL NOW()/CURDATE() use the hotel business timezone.
+      connection-init-sql: "SET time_zone = '+08:00'"
+    url: ${USER_MYSQL_URL:${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/smart_hotel_user?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}}
+    username: ${USER_MYSQL_USER:${MYSQL_USER:sh_user_app}}
+    password: ${USER_MYSQL_PASSWORD:${MYSQL_PASSWORD}}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+smarthotel:
+  internal:
+    token: ${INTERNAL_TOKEN}
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 86400000

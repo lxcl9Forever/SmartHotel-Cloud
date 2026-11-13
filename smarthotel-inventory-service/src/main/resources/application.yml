@@ -1,0 +1,38 @@
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8084}
+spring:
+  application:
+    name: smarthotel-inventory-service
+  datasource:
+    url: ${MYSQL_URL}
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+    hikari:
+      connection-init-sql: "SET time_zone = '+08:00'"
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 2s
+      connect-timeout: 2s
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+smarthotel:
+  services:
+    hotel-url: ${HOTEL_SERVICE_URL:http://127.0.0.1:8083}
+  internal:
+    token: ${INTERNAL_TOKEN}
