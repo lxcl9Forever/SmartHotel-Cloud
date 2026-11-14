@@ -2,7 +2,7 @@
 
 > 当前库存已独立数据库，最新账号、迁移和启动说明见 [库存分库说明](inventory-database-separation.md)。
 
-当前支持 Windows IDEA 运行五个 Java 服务和 Vue 前端，Ubuntu Docker 单独运行本项目的 MySQL 8.0.44、Redis 7.4.7。无需 Windows Docker Desktop，不复用 Ubuntu 既有项目的数据库和缓存。
+当前支持 Windows IDEA 运行十个 Java 服务和 Vue 前端，Ubuntu Docker 单独运行本项目的 MySQL 8.0.44、Redis 7.4.7。无需 Windows Docker Desktop，不复用 Ubuntu 既有项目的数据库和缓存。
 
 ## Windows 准备上传包
 
@@ -56,7 +56,7 @@ npm run dev
 
 浏览器打开 Vite 输出的 Local 地址。首次注册账号；管理员初始化按 `setup.md`。Navicat 的地址为虚拟机 IP，端口 13306，用户库 smart_hotel_user，用户名 sh_user_app，密码取 Windows `.env` 中 USER_MYSQL_PASSWORD；业务库 smart_hotel_business，用户名 sh_business_app，密码取 BUSINESS_MYSQL_PASSWORD。旧 smarthotel 连接仅用于读取原快照库。
 
-IDEA 直接运行启动类时需设置对应环境变量；脚本默认从 `.env` 读取并启动打包 JAR。`-DependencyHost` 只改变数据库和 Redis 地址，五个 Java 服务仍在 Windows 本地互相调用。启用现有 Nacos 时加 `-Nacos`，并保持 Ubuntu 上的 Nacos 容器运行。
+IDEA 直接运行启动类时需设置对应环境变量；脚本默认从 `.env` 读取并启动打包 JAR。`-DependencyHost` 只改变数据库和 Redis 地址，十个 Java 服务仍在 Windows 本地互相调用。启用现有 Nacos 时加 `-Nacos`，并保持 Ubuntu 上的 Nacos 容器运行。
 
 虚拟机 DHCP 地址变化后，需调整 Ubuntu `.env` 的 DEPENDENCY_BIND_ADDRESS 并重新 `sudo docker compose up -d`，同时更新 Windows 启动参数。已有密码和数据卷保持一致。
 
@@ -68,4 +68,6 @@ Windows 执行 `.\scripts\Stop-Cloud.ps1`；Ubuntu 在 `~/smarthotel-cloud` 执�
 
 ## 库存服务阶段补充
 
-已迁移环境继续使用原 Start-Cloud.ps1 命令（加 -Nacos 时启用发现），会读取 `.env` 中 `INVENTORY_MODE=remote` 和库存专用账号启动五个服务。不要重复导入 SQL、运行旧基础迁移或仅手改 mode。IDEA 单独启动时也必须配置 remote 模式和库存服务连接，优先沿用已有脚本启动，前端 5173 不变。
+已迁移环境继续使用原 Start-Cloud.ps1 命令（加 -Nacos 时启用发现），会读取 `.env` 中 `INVENTORY_MODE=remote` 和库存专用账号启动十个服务。不要重复导入 SQL、运行旧基础迁移或仅手改 mode。IDEA 单独启动时也必须配置 remote 模式和库存服务连接，优先沿用已有脚本启动，前端 5173 不变。
+
+当前为九领域数据库；新增拆分及数据回退方法见 [六领域迁移](full-domain-migration.md)，不要在已迁移环境重复运行初始化。Nacos 模式下网关、Feign 与可靠 HTTP 交接均按服务名发现；默认 Compose 使用稳定服务 DNS。

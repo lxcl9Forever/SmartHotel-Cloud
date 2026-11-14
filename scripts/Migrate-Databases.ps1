@@ -8,6 +8,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
+if (Select-String -LiteralPath (Join-Path $projectRoot '.env') -Pattern '^FULL_DOMAIN_LAYOUT=split$' -Quiet) { throw 'This legacy migration entry is for the four-domain baseline only. Use Split-FullDomains.ps1 -Action ExportRollback for latest-data rollback export.' }
 if (!$JdbcJar) { $JdbcJar = Join-Path $projectRoot '.run/tools/mysql-connector-j.jar' }
 if (!(Test-Path -LiteralPath $JdbcJar)) {
     throw 'MySQL JDBC driver not found. Supply -JdbcJar with the mysql-connector-j JAR from your Maven repository.'

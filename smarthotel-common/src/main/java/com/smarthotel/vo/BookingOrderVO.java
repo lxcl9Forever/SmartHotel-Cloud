@@ -11,6 +11,8 @@ import java.util.List;
 public class BookingOrderVO {
 
     private Long orderId;
+    private Boolean processing;
+    private String processingMessage;
 
     private String orderNo;
 

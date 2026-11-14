@@ -21,7 +21,7 @@ def main():
     raw = subprocess.check_output(['docker', 'compose', '-p', args.compose_project, 'ps', '--all', '--format', 'json'], cwd=root, text=True, encoding='utf-8')
     rows = json.loads(raw) if raw.lstrip().startswith('[') else [json.loads(line) for line in raw.splitlines() if line.strip()]
     services = {row['Service']: row for row in rows}
-    expected = {'mysql', 'redis', 'user', 'hotel', 'inventory', 'business', 'gateway', 'frontend'}
+    expected = {'mysql', 'redis', 'user', 'hotel', 'inventory', 'order', 'review', 'marketing', 'payment', 'stay', 'statistics', 'gateway', 'frontend'}
     checks = []
 
     def check(label, condition):
@@ -30,7 +30,7 @@ def main():
         checks.append(label)
         print('PASS', label)
 
-    check('eight required services exist', expected <= services.keys())
+    check('thirteen required services exist', expected <= services.keys())
     for name in sorted(expected):
         check(name + ' running and healthy', services[name].get('State') == 'running' and services[name].get('Health') == 'healthy')
 

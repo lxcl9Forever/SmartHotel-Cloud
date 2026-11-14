@@ -1,0 +1,89 @@
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8082}
+  forward-headers-strategy: none
+spring:
+  application:
+    name: smarthotel-order-service
+  datasource:
+    hikari:
+      # DATETIME defaults and SQL NOW()/CURDATE() use the hotel business timezone.
+      maximum-pool-size: 6
+      minimum-idle: 1
+      connection-init-sql: "SET time_zone = '+08:00'"
+    url: ${ORDER_MYSQL_URL:${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/smart_hotel_order?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}}
+    username: ${ORDER_MYSQL_USER:${MYSQL_USER:sh_order_app}}
+    password: ${ORDER_MYSQL_PASSWORD:${MYSQL_PASSWORD}}
+  data:
+    redis:
+      timeout: 2s
+      connect-timeout: 2s
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:}
+    listener:
+      simple:
+        auto-startup: ${RABBITMQ_ENABLED:false}
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 1500
+            readTimeout: 3000
+          userDirectory:
+            connectTimeout: 1500
+            readTimeout: 3000
+            loggerLevel: none
+          smarthotel-user-service:
+            connectTimeout: 1500
+            readTimeout: 3000
+            loggerLevel: none
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+management:
+  health:
+    rabbit:
+      enabled: ${RABBITMQ_ENABLED:false}
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+smarthotel:
+  inventory:
+    mode: ${INVENTORY_MODE:remote}
+  internal:
+    token: ${INTERNAL_TOKEN}
+  services:
+    review-url: ${REVIEW_SERVICE_URL:http://127.0.0.1:8085}
+    hotel-url: ${HOTEL_SERVICE_URL:http://127.0.0.1:8083}
+    inventory-url: ${INVENTORY_SERVICE_URL:http://127.0.0.1:8084}
+    user-url: ${USER_SERVICE_URL:http://127.0.0.1:8081}
+  order:
+    payment-timeout-minutes: 30
+  rabbitmq:
+    enabled: ${RABBITMQ_ENABLED:false}
+  ai:
+    llm-enabled: ${AI_LLM_ENABLED:false}
+    llm-url: ${AI_LLM_URL:https://api.deepseek.com/chat/completions}
+    llm-model: ${AI_LLM_MODEL:deepseek-flash}
+    llm-api-key: ${AI_LLM_API_KEY:}

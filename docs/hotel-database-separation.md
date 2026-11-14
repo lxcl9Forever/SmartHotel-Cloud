@@ -1,3 +1,5 @@
+> 此文保留此前单领域分库过程；当前九领域布局和最新回退入口见 [六领域迁移](full-domain-migration.md) 与 [交付状态](delivery-status.md)。
+
 # 酒店资料独立数据库（2026-11-12）
 
 > 后续库存也已分库，当前库存边界见 [库存分库说明](inventory-database-separation.md)。

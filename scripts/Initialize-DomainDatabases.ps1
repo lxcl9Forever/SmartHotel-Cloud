@@ -16,4 +16,6 @@ foreach ($scriptName in @('Initialize-HotelRead.ps1','Upgrade-Inventory.ps1','Up
     Write-Host ('Initializing: '+$scriptName)
     & (Join-Path $PSScriptRoot $scriptName) @shared
 }
-Write-Host 'Four domain databases initialized. Preserve .run/db-backups privately; now start application containers.'
+& (Join-Path $PSScriptRoot 'Split-FullDomains.ps1') @shared -Action Rehearse
+& (Join-Path $PSScriptRoot 'Split-FullDomains.ps1') @shared -Action Migrate
+Write-Host 'Nine domain databases initialized. Preserve private backups before starting applications.'

@@ -210,3 +210,10 @@ python scripts/integration_smoke.py --compose-project smarthotel-cloud-verificat
 测试环境为 smarthotel-cloud-verification-20261113 和 smarthotel-cloud-verification-fresh-20261113，使用独立端口、凭据与数据卷，不连接真实顾客库。Nginx 在网关容器 IP 改变后无需重启即可恢复 API。用户、酒店和库存依次停机后返回 503，恢复后调用方无需重启；不自动重试写请求。当前架构和限制见 delivery-status.md，私有证据 .run/delivery-verification.json。
 
 桌面授权超时，未完成本轮浏览器视觉交互验收。MOCK 交易不代表真实外部付款，未验证生产负载、跨机高可用和真实外部 AI。
+
+
+## 2026-11-14 完整领域拆分交付
+
+当前架构为十个后端、九领域库和十三容器。验证结果和限制以 [当前交付状态](delivery-status.md) 为准：174 项自动测试、37 项完整容器分布式回归、31 项隔离工作流故障回归、26 项营销协议并发验收、21 项部署就绪、7 项停启保留、24 项 Ubuntu 迁移后验收和 81 项九域权限边界检查。不同运行包含重叠检查，不累加。
+
+原库备份恢复演练、正式迁移、全新安装入口，以及含新增数据的回退导出均已执行。真实支付和外部 AI 未作为模拟验收成功宣称。浏览器检查覆盖登录页视觉与边界，已登录业务以 API 验收为主。

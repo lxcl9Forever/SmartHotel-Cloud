@@ -17,6 +17,10 @@ spring:
 smarthotel:
   services:
     user-uri: lb://smarthotel-user-service
-    business-uri: lb://smarthotel-business-service
-
+    order-uri: lb://smarthotel-order-service
     hotel-uri: lb://smarthotel-hotel-service
+    review-uri: lb://smarthotel-review-service
+    marketing-uri: lb://smarthotel-marketing-service
+    payment-uri: lb://smarthotel-payment-service
+    stay-uri: lb://smarthotel-stay-service
+    statistics-uri: lb://smarthotel-statistics-service

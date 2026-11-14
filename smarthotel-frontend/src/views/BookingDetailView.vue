@@ -20,7 +20,8 @@
           v-if="order"
       >
 
-        <el-descriptions
+        <el-alert v-if="order.processing" :title="order.processingMessage || '订单正在处理中，请稍后刷新查看结果'" type="info" :closable="false" style="margin-bottom: 16px" />
+          <el-descriptions
             title="预订信息"
             :column="2"
             border
@@ -177,7 +178,7 @@
           </el-button>
 
           <el-button
-              v-if="order.orderStatus === 'WAIT_PAY'"
+              v-if="order.orderStatus === 'WAIT_PAY' && !order.processing"
               type="danger"
               plain
               @click="handleCancel"
@@ -187,7 +188,7 @@
 
 
           <el-button
-              v-if="order.orderStatus === 'WAIT_PAY'"
+              v-if="order.orderStatus === 'WAIT_PAY' && !order.processing"
               type="primary"
               @click="handlePay"
           >

@@ -1,3 +1,5 @@
+> 此文保留此前单领域分库过程；当前九领域布局和最新回退入口见 [六领域迁移](full-domain-migration.md) 与 [交付状态](delivery-status.md)。
+
 # 库存独立数据库（2026-11-12）
 
 库存服务使用 `smart_hotel_inventory` / `sh_inventory_domain`，独占 room_inventory、inventory_operation、inventory_cache_sync、inventory_reservation、inventory_tcc_attempt 五张表。订单、预订请求和 inventory_tcc_journal 仍在 smart_hotel_business，由业务进程管理。用户、酒店、业务、库存四个 schema 共用同一 MySQL 实例，不是四台数据库服务器。

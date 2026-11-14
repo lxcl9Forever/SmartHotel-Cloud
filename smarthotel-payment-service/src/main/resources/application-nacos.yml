@@ -1,0 +1,23 @@
+spring:
+  config:
+    import: optional:nacos:${spring.application.name}.yml?group=SMARTHOTEL_CLOUD
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD}
+      discovery:
+        enabled: true
+        ip: ${NACOS_INSTANCE_IP:127.0.0.1}
+        group: SMARTHOTEL_CLOUD
+      config:
+        enabled: true
+        encode: UTF-8
+        group: SMARTHOTEL_CLOUD
+smarthotel:
+  services:
+    hotel-url: ""
+    user-url: ""
+    inventory-url: ""
+    order-url: ""
+    review-url: ""

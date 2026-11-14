@@ -55,6 +55,7 @@
           </div>
 
 
+          <el-alert v-if="order.processing" :title="order.processingMessage || '订单正在处理中，请稍后刷新查看结果'" type="warning" :closable="false" show-icon />
           <el-divider />
 
 

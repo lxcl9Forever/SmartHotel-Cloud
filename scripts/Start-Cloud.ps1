@@ -1,108 +1,72 @@
-param(
-    [switch]$Nacos,
-    [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9.-]*$')]
-    [string]$DependencyHost = '127.0.0.1'
-)
-$ErrorActionPreference = 'Stop'
+param([switch]$Nacos,[ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9.-]*$')][string]$DependencyHost='127.0.0.1',[ValidateRange(1,65535)][int]$DatabasePort=13306,[ValidateRange(1,65535)][int]$RedisPort=16379)
+$ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Import-CloudEnv.ps1')
-$projectRoot = Split-Path $PSScriptRoot -Parent
-$runDir = Join-Path $projectRoot '.run'
+$projectRoot=Split-Path $PSScriptRoot -Parent
+$runDir=Join-Path $projectRoot '.run'
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
-$pidFile = Join-Path $runDir 'processes.json'
-if (Test-Path -LiteralPath $pidFile) { throw 'A run record exists. Run scripts/Stop-Cloud.ps1 before starting again.' }
-$inventoryRemote = $env:INVENTORY_MODE -eq 'remote'
-if ($env:INVENTORY_MODE -and $env:INVENTORY_MODE -notin @('local','remote')) { throw 'Unsupported INVENTORY_MODE.' }
-if ($env:INVENTORY_MYSQL_USER -and !$inventoryRemote) { throw 'Inventory ownership was migrated. Do not switch to local mode without reconciling pending decisions and permissions.' }
-if ($env:HOTEL_WRITE_OWNER -ne 'enabled') { throw 'Run Upgrade-HotelWrite.ps1 with applications stopped before using hotel management delegation.' }
-if ($env:HOTEL_CATALOG_REMOTE -ne 'enabled') { throw 'Run Upgrade-HotelCatalog.ps1 with applications stopped before using the hotel catalog boundary.' }
-if ($env:HOTEL_DATA_LAYOUT -notin @('split','rollback-shared')) { throw 'Run Split-HotelDatabase.ps1 with applications stopped before starting the independent hotel schema.' }
-if ($env:INVENTORY_DATA_LAYOUT -notin @('split','rollback-shared')) { throw 'Run Split-InventoryDatabase.ps1 with applications stopped before using the independent inventory database.' }
-$databaseSettings = @{}
-if ($env:DB_LAYOUT) {
-    if ($env:DB_LAYOUT -notin @('split','rollback-shared')) { throw 'Unsupported DB_LAYOUT in .env.' }
-    $roles = @('USER','BUSINESS','HOTEL'); if ($inventoryRemote) { $roles += 'INVENTORY' }
-    foreach ($role in $roles) {
-        $schema = [Environment]::GetEnvironmentVariable($role + '_MYSQL_DATABASE')
-        $username = [Environment]::GetEnvironmentVariable($role + '_MYSQL_USER')
-        $password = [Environment]::GetEnvironmentVariable($role + '_MYSQL_PASSWORD')
-        if (!$schema -or !$username -or !$password -or $schema -notmatch '^[A-Za-z0-9_]+$') {
-            throw "Incomplete $role database settings. Restore the migration-generated .env; do not fall back to the old shared account."
-        }
-        $databaseSettings[$role] = @{Schema=$schema;Username=$username;Password=$password}
-    }
-} else {
-    throw 'Initialize database separation and run Initialize-HotelRead.ps1 before starting the four-service layout.'
+$pidFile=Join-Path $runDir 'processes.json'
+if (Test-Path -LiteralPath $pidFile) { throw 'A project run record exists. Stop-Cloud.ps1 before starting again.' }
+if ($env:FULL_DOMAIN_LAYOUT -ne 'split') { throw 'Complete Split-FullDomains.ps1 rehearsal and migration before starting the nine-domain layout.' }
+if ($env:INVENTORY_DATA_LAYOUT -ne 'split' -or $env:HOTEL_DATA_LAYOUT -ne 'split') { throw 'Independent hotel and inventory schemas are required.' }
+$roles=@('USER','HOTEL','INVENTORY','ORDER','REVIEW','MARKETING','PAYMENT','STAY','STATISTICS')
+$settings=@{}
+foreach ($role in $roles) {
+    $schema=[Environment]::GetEnvironmentVariable($role+'_MYSQL_DATABASE')
+    $user=[Environment]::GetEnvironmentVariable($role+'_MYSQL_USER')
+    $password=[Environment]::GetEnvironmentVariable($role+'_MYSQL_PASSWORD')
+    if (!$schema -or !$user -or !$password -or $schema -notmatch '^[A-Za-z0-9_]+$') { throw "Incomplete $role database credentials. Restore the private migration environment." }
+    $settings[$role]=@{Schema=$schema;User=$user;Password=$password}
 }
-$userJwtSecret = $env:JWT_SECRET
-# Do not pass the root password, other service credentials, or JWT signing key to every child.
-foreach ($key in @('MYSQL_ROOT_PASSWORD','MYSQL_PASSWORD','JWT_SECRET','USER_MYSQL_PASSWORD','BUSINESS_MYSQL_PASSWORD',
-                  'USER_MYSQL_USER','BUSINESS_MYSQL_USER','USER_MYSQL_DATABASE','BUSINESS_MYSQL_DATABASE','USER_MYSQL_URL','BUSINESS_MYSQL_URL','HOTEL_MYSQL_DATABASE','HOTEL_MYSQL_USER','HOTEL_MYSQL_PASSWORD','HOTEL_MYSQL_URL','INVENTORY_MYSQL_DATABASE','INVENTORY_MYSQL_USER','INVENTORY_MYSQL_PASSWORD','INVENTORY_MYSQL_URL')) {
-    Remove-Item -LiteralPath ('Env:' + $key) -ErrorAction SilentlyContinue
-}
-$env:REDIS_HOST = $DependencyHost; $env:REDIS_PORT = '16379'
-$env:SERVER_ADDRESS = '127.0.0.1'
-$env:HOTEL_SERVICE_URL = 'http://127.0.0.1:8083'
-$env:USER_SERVICE_URL = 'http://127.0.0.1:8081'
-$env:INVENTORY_SERVICE_URL = 'http://127.0.0.1:8084'
+$signingSecret=$env:JWT_SECRET
+$paymentEnvironment=@{}
+Get-ChildItem Env: | Where-Object { $_.Name -like 'ALIPAY_*' } | ForEach-Object { $paymentEnvironment[$_.Name]=$_.Value }
+$aiSecret=$env:AI_LLM_API_KEY
+# Each child receives only its own database credentials and required integration secrets.
+Get-ChildItem Env: | Where-Object { $_.Name -match '(^|_)MYSQL_(PASSWORD|ROOT_PASSWORD|USER|DATABASE|URL)$|^JWT_SECRET$|^ALIPAY_|^AI_LLM_API_KEY$' } | ForEach-Object { Remove-Item -LiteralPath ('Env:'+$_.Name) }
+$env:REDIS_HOST=$DependencyHost;$env:REDIS_PORT=[string]$RedisPort;$env:SERVER_ADDRESS='127.0.0.1';$env:INVENTORY_MODE='remote'
+$ports=@{USER=8081;HOTEL=8083;INVENTORY=8084;ORDER=8082;REVIEW=8085;MARKETING=8086;PAYMENT=8087;STAY=8089;STATISTICS=8090}
+foreach ($role in $roles) { [Environment]::SetEnvironmentVariable($role+'_SERVICE_URL',('http://127.0.0.1:'+$ports[$role]),'Process') }
 if ($Nacos) {
-    if ([string]::IsNullOrWhiteSpace($env:NACOS_ADDR)) { $env:NACOS_ADDR = $DependencyHost + ':8848' }
-    if ([string]::IsNullOrWhiteSpace($env:NACOS_USERNAME)) { $env:NACOS_USERNAME = 'nacos' }
-    if ([string]::IsNullOrWhiteSpace($env:NACOS_PASSWORD)) {
-        throw 'Add NACOS_PASSWORD (the console login password) to the project .env first. Do not use NACOS_AUTH_TOKEN.'
+    if (!$env:NACOS_ADDR) { $env:NACOS_ADDR=$DependencyHost+':8848' }
+    if (!$env:NACOS_USERNAME) { $env:NACOS_USERNAME='nacos' }
+    if (!$env:NACOS_PASSWORD) { throw 'NACOS_PASSWORD is required for discovery mode.' }
+    $env:NACOS_INSTANCE_IP='127.0.0.1'
+    foreach ($role in $roles) { [Environment]::SetEnvironmentVariable($role+'_SERVICE_URL',('lb://smarthotel-'+$role.ToLowerInvariant()+'-service'),'Process') }
+    if ($env:NACOS_ADDR -notmatch '^([A-Za-z0-9.-]+):([0-9]+)$') { throw 'NACOS_ADDR must be host:port.' }
+    $nacosHost=$Matches[1];$nacosPort=[int]$Matches[2]
+    foreach ($probePort in @($nacosPort,($nacosPort+1000))) {
+        $probe=New-Object System.Net.Sockets.TcpClient
+        try { $pending=$probe.BeginConnect($nacosHost,$probePort,$null,$null);if (!$pending.AsyncWaitHandle.WaitOne(3000)) { throw "Nacos port $probePort is unavailable." };$probe.EndConnect($pending) } finally { $probe.Dispose() }
     }
-    # All Java services run on this Windows host and listen on loopback.
-    # The VM hosts only Nacos; its IP must never become a Java instance address.
-    $env:NACOS_INSTANCE_IP = '127.0.0.1'
-    if ($env:NACOS_ADDR -notmatch '^([a-zA-Z0-9.-]+):([0-9]+)$') {
-        throw 'NACOS_ADDR must be host:port, for example 192.168.229.131:8848 (not the console port 8088).'
-    }
-    $nacosHost = $Matches[1]; $nacosPort = [int]$Matches[2]
-    if ($nacosPort -lt 1 -or $nacosPort -gt 64535) { throw 'Invalid NACOS_ADDR port.' }
-    foreach ($probePort in @($nacosPort, ($nacosPort + 1000))) {
-        $probeClient = New-Object System.Net.Sockets.TcpClient
-        try {
-            $pending = $probeClient.BeginConnect($nacosHost, $probePort, $null, $null)
-            if (!$pending.AsyncWaitHandle.WaitOne(3000)) { throw "Nacos TCP port ${nacosHost}:$probePort is unreachable." }
-            $probeClient.EndConnect($pending)
-        } finally { $probeClient.Dispose() }
-    }
-    Write-Host "Nacos discovery mode: $($env:NACOS_ADDR); Windows instances register as 127.0.0.1."
+    Write-Host "Nacos mode: $($env:NACOS_ADDR); all Windows instances register as 127.0.0.1."
 }
-$processes = @()
+$processes=@()
 try {
-    $entries = ,@('smarthotel-user-service',8081); if ($inventoryRemote) { $entries += ,@('smarthotel-inventory-service',8084) }
-    $entries += @(@('smarthotel-business-service',8082),@('smarthotel-hotel-service',8083),@('smarthotel-gateway',8080))
-    foreach ($entry in $entries) {
-        $module = $entry[0]; $port = $entry[1]
-        if ($module -eq 'smarthotel-gateway') {
-            foreach ($key in @('MYSQL_URL','MYSQL_USER','MYSQL_PASSWORD','JWT_SECRET')) { Remove-Item -LiteralPath ('Env:' + $key) -ErrorAction SilentlyContinue }
-        } else {
-            $role = if ($module -eq 'smarthotel-user-service') { 'USER' } elseif ($module -eq 'smarthotel-hotel-service') { 'HOTEL' } elseif ($module -eq 'smarthotel-inventory-service') { 'INVENTORY' } else { 'BUSINESS' }
-            $settings = $databaseSettings[$role]
-            $env:MYSQL_URL = 'jdbc:mysql://' + $DependencyHost + ':13306/' + $settings.Schema + '?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true'
-            $env:MYSQL_USER = $settings.Username
-            $env:MYSQL_PASSWORD = $settings.Password
-            if ($role -eq 'USER') { $env:JWT_SECRET = $userJwtSecret } else { Remove-Item -LiteralPath Env:JWT_SECRET -ErrorAction SilentlyContinue }
+    foreach ($role in @('USER','HOTEL','INVENTORY','MARKETING','ORDER','PAYMENT','STAY','REVIEW','STATISTICS','GATEWAY')) {
+        $module='smarthotel-'+$role.ToLowerInvariant()+'-service'
+        $port=$ports[$role]
+        foreach ($key in @('MYSQL_URL','MYSQL_USER','MYSQL_PASSWORD','JWT_SECRET','AI_LLM_API_KEY')) { Remove-Item -LiteralPath ('Env:'+$key) -ErrorAction SilentlyContinue }
+        Get-ChildItem Env: | Where-Object { $_.Name -like 'ALIPAY_*' } | ForEach-Object { Remove-Item -LiteralPath ('Env:'+$_.Name) }
+        if ($role -eq 'GATEWAY') { $module='smarthotel-gateway';$port=8080 } else {
+            $db=$settings[$role]
+            $env:MYSQL_URL='jdbc:mysql://'+$DependencyHost+':'+$DatabasePort+'/'+$db.Schema+'?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true'
+            $env:MYSQL_USER=$db.User;$env:MYSQL_PASSWORD=$db.Password
+            if ($role -eq 'USER') { $env:JWT_SECRET=$signingSecret }
+            if ($role -eq 'ORDER') { $env:AI_LLM_API_KEY=$aiSecret }
+            if ($role -eq 'PAYMENT') { foreach ($key in $paymentEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key,$paymentEnvironment[$key],'Process') } }
         }
         if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) { throw "Port $port is already in use." }
-        $jar = Join-Path $projectRoot "$module/target/$module-1.0.0-SNAPSHOT.jar"
-        if (!(Test-Path -LiteralPath $jar)) { throw 'Build the project with mvn verify first.' }
-        $argsList = @('-Dfile.encoding=UTF-8', '-Duser.timezone=Asia/Shanghai', '-jar', ('"' + $jar + '"'))
-        if ($Nacos) { $argsList += '--spring.profiles.active=nacos' }
-        $proc = Start-Process -FilePath (Get-Command java).Source -ArgumentList $argsList -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runDir "$module.out.log") -RedirectStandardError (Join-Path $runDir "$module.err.log")
-        $processes += [pscustomobject]@{Id=$proc.Id;StartTime=$proc.StartTime.ToUniversalTime().Ticks;Module=$module}
+        $jar=Join-Path $projectRoot "$module/target/$module-1.0.0-SNAPSHOT.jar"
+        if (!(Test-Path -LiteralPath $jar)) { throw "Build missing module first: $module" }
+        $launchArgs=@('-Dfile.encoding=UTF-8','-Duser.timezone=Asia/Shanghai','-Xms64m','-Xmx384m','-jar',('"'+$jar+'"'))
+        if ($Nacos) { $launchArgs+='--spring.profiles.active=nacos' }
+        $app=Start-Process -FilePath (Get-Command java).Source -ArgumentList $launchArgs -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runDir "$module.out.log") -RedirectStandardError (Join-Path $runDir "$module.err.log")
+        $processes+=[pscustomobject]@{Id=$app.Id;StartTime=$app.StartTime.ToUniversalTime().Ticks;Module=$module}
         ConvertTo-Json -InputObject @($processes) | Set-Content -LiteralPath $pidFile -Encoding UTF8
-        $ready = $false
-        for ($attempt=0;$attempt -lt 90;$attempt++) {
-            if ($proc.HasExited) { throw "$module exited. Inspect .run/$module.err.log and .out.log." }
-            try { $health = Invoke-RestMethod "http://127.0.0.1:$port/actuator/health" -TimeoutSec 2; if ($health.status -eq 'UP') { $ready=$true;break } } catch { }
-            Start-Sleep -Seconds 1
-        }
-        if (!$ready) { throw "$module is not healthy. Inspect .run logs." }
+        $ready=$false
+        for ($attempt=0;$attempt -lt 90;$attempt++) { if ($app.HasExited) { throw "$module exited; inspect .run logs." };try { $health=Invoke-RestMethod "http://127.0.0.1:$port/actuator/health" -TimeoutSec 2;if ($health.status -eq 'UP') { $ready=$true;break } } catch {};Start-Sleep -Seconds 1 }
+        if (!$ready) { throw "$module did not become healthy; inspect .run logs." }
         Write-Host "$module ready on $port"
     }
-    Write-Host 'Gateway: http://127.0.0.1:8080 . Start the Vue frontend with npm run dev.'
-} catch {
-    if ($processes.Count -gt 0) { & (Join-Path $PSScriptRoot 'Stop-Cloud.ps1') }
-    throw
-}
+    Write-Host 'Ten backend processes ready. Start Vue with npm run dev --prefix smarthotel-frontend.'
+} catch { if ($processes.Count -gt 0) { & (Join-Path $PSScriptRoot 'Stop-Cloud.ps1') };throw }

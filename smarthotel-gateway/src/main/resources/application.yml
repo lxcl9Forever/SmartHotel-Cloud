@@ -26,6 +26,10 @@ smarthotel:
     token: ${INTERNAL_TOKEN}
   services:
     user-uri: ${USER_SERVICE_URI:http://127.0.0.1:8081}
-    business-uri: ${BUSINESS_SERVICE_URI:http://127.0.0.1:8082}
-
+    order-uri: ${ORDER_SERVICE_URI:http://127.0.0.1:8082}
     hotel-uri: ${HOTEL_SERVICE_URI:http://127.0.0.1:8083}
+    review-uri: ${REVIEW_SERVICE_URI:http://127.0.0.1:8085}
+    marketing-uri: ${MARKETING_SERVICE_URI:http://127.0.0.1:8086}
+    payment-uri: ${PAYMENT_SERVICE_URI:http://127.0.0.1:8087}
+    stay-uri: ${STAY_SERVICE_URI:http://127.0.0.1:8089}
+    statistics-uri: ${STATISTICS_SERVICE_URI:http://127.0.0.1:8090}

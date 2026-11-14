@@ -9,6 +9,7 @@ import datetime as dt
 import json
 from pathlib import Path
 import secrets
+import time
 import subprocess
 import urllib.error
 import urllib.parse
@@ -50,11 +51,13 @@ def container(service, command):
 
 def sql(statement):
     # Operator-only access is confined by the disposable Compose project guard.
-    schema = 'smart_hotel_business'
+    schema = 'smart_hotel_order'
     if any(table in statement for table in ('sys_user', 'sys_role')):
         schema = 'smart_hotel_user'
     elif 'room_inventory' in statement:
         schema = 'smart_hotel_inventory'
+    elif any(table in statement for table in ('refund_record', 'refund_payment_record', 'FROM payment', 'INTO payment')):
+        schema = 'smart_hotel_payment'
     elif 'room_type' in statement:
         schema = 'smart_hotel_hotel'
     return container('mysql',['sh','-c','MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B "$1" -e "$2"','sh',schema,statement])
@@ -125,24 +128,29 @@ def booking():
         guests=[dict(guestName='Synthetic Guest',phone='138'+basephone[3:],idType='PASSPORT',idNumber='SYNTHETIC001')]),gt)['data']
 
 before=inv()
+before_locked=sql(f"SELECT locked_qty FROM room_inventory WHERE room_type_id={roomtype} AND inventory_date='{today}'")
 order=booking()
 check('booking traverses gateway and remote authentication',order['orderStatus']=='WAIT_PAY' and inv()==before-1)
 request(f"/api/v1/bookings/{order['orderId']}/cancel",'POST',token=gt)
-check('cancel releases MySQL and Redis reservation',inv()==before and sql(f"SELECT locked_qty FROM room_inventory WHERE room_type_id={roomtype} AND inventory_date='{today}'")=='0')
+check('cancel releases MySQL and Redis reservation',inv()==before and sql(f"SELECT locked_qty FROM room_inventory WHERE room_type_id={roomtype} AND inventory_date='{today}'")==before_locked)
 order=booking()
 request(f"/api/v1/bookings/{order['orderId']}/mock-pay",'POST',token=gt)
 check('explicit simulated payment confirms booking',request(f"/api/v1/bookings/{order['orderId']}",token=gt)['data']['orderStatus']=='CONFIRMED')
 request('/api/v1/customer/refund/apply?'+urllib.parse.urlencode({'orderId':order['orderId'],'reason':'isolated regression'}),'POST',token=gt)
+time.sleep(3)
 refund=int(sql(f"SELECT refund_id FROM refund_record WHERE order_id={int(order['orderId'])}"))
 request(f'/api/v1/admin/refund/{refund}/approve','POST',token=at)
 check('refund approval restores inventory',inv()==before)
 check('administrator payment query remains in business service',request('/api/v1/admin/payments',token=at)['code']==200)
 request('/api/v1/admin/employees','POST',dict(username=staff,password=password,employeeNo='T'+suffix,employeeName='Synthetic Staff',phone='137'+basephone[3:],email='',position='Test'),at)
 st=login(staff)
+time.sleep(3)
 order=booking()
 request(f"/api/v1/bookings/{order['orderId']}/mock-pay",'POST',token=gt)
+time.sleep(3)
 rooms=request(f"/api/v1/staff/check-ins/orders/{order['orderId']}/available-rooms",token=st)['data']
 request('/api/v1/staff/check-ins','POST',dict(orderId=order['orderId'],roomIds=[rooms[0]['roomId']],remark='regression'),st)
+time.sleep(3)
 request('/api/v1/staff/check-outs','POST',dict(orderId=order['orderId'],remark='regression'),st)
 check('new staff account can check in and check out a paid booking',request(f"/api/v1/bookings/{order['orderId']}",token=gt)['data']['orderStatus']=='CHECKED_OUT')
 request('/api/v1/customer/profile/password','PUT',dict(oldPassword=password,newPassword=password+'new'),gt)

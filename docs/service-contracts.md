@@ -1,3 +1,17 @@
+# 当前服务契约
+
+本轮新增契约：`OrderSnapshot` 是无数据库注解的订单快照，`MarketingContract` 定义预留/决议/报价；integration 的 `WorkflowContract` 定义 Claim/Claimed/Complete/Abort，`DomainEvent` 定义带聚合版本和删除标识的事件信封。字段与实际 Java record 对应，控制器内部接口均校验内部凭据。
+
+- `/internal/v1/orders/{id}` 与 customer-view：订单所有者读取，顾客视图再次核对用户名归属。
+- `/internal/v1/order-workflows/claim|complete|abort`：订单占用和状态协调，校验操作 ID、摘要、领域和动作；重复完成幂等。
+- `/internal/v1/marketing/reservations/prepare|decide`：营销持久预留，重复标识必须携带相同内容；提前撤销防悬挂。
+- `/internal/v1/domain-events`：至少一次事件接收，Inbox 去重和内容冲突检测、版本单调与墓碑。
+- `/internal/v1/domain-events/health|replay`：仅内部运维的积压查询及 DEAD 重排，网关不发布。
+
+浏览器既有 `/api/v1` 路径保留，由网关转发实际领域；用户目录、酒店与库存已有契约继续使用。订单、支付等数据库实体不作为跨服务参数，共享模块不含持久化 Mapper。读模型异步收敛，付款和办理以权威工作流状态为准。
+
+以下为此前阶段的契约演进记录，涉及当时业务模块布局的叙述以 README 和 full-domain-architecture.md 的当前架构为准。
+
 # 服务契约整理：库存读取（2026-11-12）
 
 库存内部读取接口 /internal/v1/inventory/query 与 /internal/v1/inventory/day 使用 InventoryReadContract.Snapshot，不再将 RoomInventory 持久化实体作为 HTTP 返回类型。Snapshot 是没有 MyBatis 注解、没有实体依赖的独立 DTO，目前仍放在 common 的 contract 包；common 的其余共享模型尚未全部拆除。

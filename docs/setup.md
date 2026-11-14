@@ -1,13 +1,13 @@
 # 启动与配置
 
-当前已完成用户、酒店资料、库存与订单业务四域分库。最新数据库归属、首次迁移顺序和回退边界见 [酒店分库说明](hotel-database-separation.md)。已有环境直接启动，不重复迁移。
+当前已完成九个领域分库，服务清单以 README 为准。最新数据库归属、首次迁移顺序和回退边界见 [酒店分库说明](hotel-database-separation.md)。已有环境直接启动，不重复迁移。
 
 ## IDEA
 
-使用 IDEA 打开项目根目录的 `pom.xml`，导入 Maven 聚合工程，Project SDK 选 JDK 17。五个启动类：
+使用 IDEA 打开项目根目录的 `pom.xml`，导入 Maven 聚合工程，Project SDK 选 JDK 17。十个独立启动类（新增服务见 README）：
 
 - `smarthotel-user-service` → `com.smarthotel.UserServiceApplication`
-- `smarthotel-business-service` → `com.smarthotel.BusinessServiceApplication`
+- `smarthotel-order-service` → `com.smarthotel.OrderServiceApplication`
 - `smarthotel-hotel-service` → `com.smarthotel.hotel.HotelServiceApplication`
 - `smarthotel-inventory-service` → `com.smarthotel.inventory.InventoryServiceApplication`
 - `smarthotel-gateway` → `com.smarthotel.gateway.GatewayApplication`
@@ -25,7 +25,7 @@
 | USER_SERVICE_URL | 不需要 | 默认 http://127.0.0.1:8081 | 不需要 |
 | USER_SERVICE_URI、BUSINESS_SERVICE_URI | 不需要 | 不需要 | 默认本机 8081、8082 |
 
-Docker Compose 的开发端口为 MySQL **13306**、Redis **16379**；容器间使用 3306、6379。密码从本项目生成的 `.env` 读取。分库后，user 使用 `USER_MYSQL_DATABASE/USER/PASSWORD`，business 使用 `BUSINESS_MYSQL_DATABASE/USER/PASSWORD`；脚本会映射到各自的 MYSQL_* 环境变量。不要把整个 `.env` 注入每个 IDEA 进程；根账号密码和其他服务的数据库密码不应传给应用。切勿把原单体的数据库 URL 直接粘贴为新项目数据源。
+Docker Compose 的开发端口为 MySQL **13306**、Redis **16379**；容器间使用 3306、6379。密码从本项目生成的 `.env` 读取。分库后，user 使用 `USER_MYSQL_DATABASE/USER/PASSWORD`，order 使用 `ORDER_MYSQL_DATABASE/USER/PASSWORD`，新增领域分别使用 REVIEW/MARKETING/PAYMENT/STAY/STATISTICS 前缀；脚本会映射到各自的 MYSQL_* 环境变量。不要把整个 `.env` 注入每个 IDEA 进程；根账号密码和其他服务的数据库密码不应传给应用。切勿把原单体的数据库 URL 直接粘贴为新项目数据源。
 
 ## 数据库
 
@@ -54,14 +54,14 @@ WHERE u.username = '替换为刚注册的账号';
 
 本阶段默认本地直连可运行。需要学习服务注册发现时，自行启动 Nacos **3.0.3**（Alibaba 对应组件版本），启用认证并自行设置安全的账号密码。Nacos 服务端还需正确配置认证 Token、server identity 等参数，按照 [Nacos 官方快速开始](https://nacos.io/docs/latest/quickstart/quick-start/) 操作，不使用生产环境默认密码。
 
-五个后端应用都设置 `NACOS_ADDR`、`NACOS_USERNAME`、`NACOS_PASSWORD`，再运行：
+十个后端应用都设置 `NACOS_ADDR`、`NACOS_USERNAME`、`NACOS_PASSWORD`，再运行：
 
 ```powershell
 # 可把上述变量加入本项目 .env，由启动脚本读取
 .\scripts\Start-Cloud.ps1 -Nacos
 ```
 
-应用会注册到 `SMARTHOTEL_CLOUD` 组。网关使用 `lb://smarthotel-user-service` 和 `lb://smarthotel-business-service`，Feign 根据服务名发现用户服务。数据源、Redis 等启动配置也可发布为该组下的 `smarthotel-user-service.yml`、`smarthotel-business-service.yml`、`smarthotel-gateway.yml`；`spring.config.import` 是可选导入，未发布时保留本地值。不要把配置中心密码放进 Git。
+应用会注册到 `SMARTHOTEL_CLOUD` 组。网关使用 `lb://smarthotel-user-service` 和 `lb://smarthotel-order-service`，Feign 根据服务名发现用户服务。数据源、Redis 等启动配置也可发布为该组下的 `smarthotel-user-service.yml`、`smarthotel-order-service.yml`、`smarthotel-gateway.yml`；`spring.config.import` 是可选导入，未发布时保留本地值。不要把配置中心密码放进 Git。
 
 跨主机 Nacos 环境需要额外暴露 gRPC 端口并设置可达的服务注册地址；本指南默认本机开发，不宣称跨主机/集群已验证。
 
@@ -78,3 +78,5 @@ Windows `Stop-Cloud.ps1` 使用操作系统结束开发进程，不宣称是业�
 酒店日期与时间使用北京时间。两个服务的 Hikari 连接初始化显式执行 SET time_zone = '+08:00'，保证 MySQL 的 NOW()/CURDATE() 和 DATETIME 默认值采用同一时区。JDBC serverTimezone 仅声明驱动转换时区，不能单独保证 MySQL 会话时区。
 
 2026-11-11 排查退款页面少 8 小时：MySQL SYSTEM 时区为 UTC，退款 create_time 使用数据库默认 CURRENT_TIMESTAMP；前端原样显示 LocalDateTime。修复会话配置后需要重启后端，新记录使用北京时间。已有 DATETIME 没有时区标记，可能混有 Java 本地时间和数据库 UTC 时间，不能全表统一加 8 小时；如需修复历史记录，应按字段来源和证据单独备份、核对后处理。
+
+支付、营销、入住、评价、统计启动类分别为 `com.smarthotel.PaymentServiceApplication`、`MarketingServiceApplication`、`StayServiceApplication`、`ReviewServiceApplication`、`StatisticsServiceApplication`；优先使用 Start-Cloud 脚本按角色注入凭据。六领域新迁移见 full-domain-migration.md。

@@ -1,6 +1,7 @@
 name: smarthotel-cloud
 x-backend-env: &backend-env
   SERVER_ADDRESS: 0.0.0.0
+  JAVA_TOOL_OPTIONS: -Xms64m -Xmx384m -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8
   REDIS_HOST: redis
   REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
   INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Set INTERNAL_TOKEN in .env}
@@ -44,12 +45,48 @@ services:
       MYSQL_USER: ${USER_MYSQL_USER:-sh_user_app}
       MYSQL_PASSWORD: ${USER_MYSQL_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      HOTEL_SERVICE_URL: http://hotel:8083
+      INVENTORY_SERVICE_URL: http://inventory:8084
+      ORDER_SERVICE_URL: http://order:8082
+      REVIEW_SERVICE_URL: http://review:8085
+      MARKETING_SERVICE_URL: http://marketing:8086
+      PAYMENT_SERVICE_URL: http://payment:8087
+      STAY_SERVICE_URL: http://stay:8089
+      STATISTICS_SERVICE_URL: http://statistics:8090
     depends_on:
       mysql: {condition: service_healthy}
       redis: {condition: service_healthy}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8081; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  hotel:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-hotel-service}
+    environment:
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${HOTEL_MYSQL_DATABASE:-smart_hotel_hotel}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${HOTEL_MYSQL_USER:-sh_hotel_domain}
+      MYSQL_PASSWORD: ${HOTEL_MYSQL_PASSWORD:-}
+      USER_SERVICE_URL: http://user:8081
+      INVENTORY_SERVICE_URL: http://inventory:8084
+      ORDER_SERVICE_URL: http://order:8082
+      REVIEW_SERVICE_URL: http://review:8085
+      MARKETING_SERVICE_URL: http://marketing:8086
+      PAYMENT_SERVICE_URL: http://payment:8087
+      STAY_SERVICE_URL: http://stay:8089
+      STATISTICS_SERVICE_URL: http://statistics:8090
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8083; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
       interval: 10s
       timeout: 5s
       retries: 18
@@ -61,13 +98,21 @@ services:
       args: {MODULE: smarthotel-inventory-service}
     environment:
       <<: *backend-env
-      MYSQL_URL: jdbc:mysql://mysql:3306/${INVENTORY_MYSQL_DATABASE:-smart_hotel_inventory}?serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-      HOTEL_SERVICE_URL: http://hotel:8083
+      MYSQL_URL: jdbc:mysql://mysql:3306/${INVENTORY_MYSQL_DATABASE:-smart_hotel_inventory}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       MYSQL_USER: ${INVENTORY_MYSQL_USER:-sh_inventory_domain}
       MYSQL_PASSWORD: ${INVENTORY_MYSQL_PASSWORD:-}
+      USER_SERVICE_URL: http://user:8081
+      HOTEL_SERVICE_URL: http://hotel:8083
+      ORDER_SERVICE_URL: http://order:8082
+      REVIEW_SERVICE_URL: http://review:8085
+      MARKETING_SERVICE_URL: http://marketing:8086
+      PAYMENT_SERVICE_URL: http://payment:8087
+      STAY_SERVICE_URL: http://stay:8089
+      STATISTICS_SERVICE_URL: http://statistics:8090
     depends_on:
       mysql: {condition: service_healthy}
       redis: {condition: service_healthy}
+      hotel: {condition: service_healthy}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8084; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
@@ -75,25 +120,31 @@ services:
       timeout: 5s
       retries: 18
       start_period: 30s
-  business:
+  order:
     build:
       context: .
       dockerfile: deploy/Dockerfile
-      args: {MODULE: smarthotel-business-service}
+      args: {MODULE: smarthotel-order-service}
     environment:
       <<: *backend-env
-      MYSQL_URL: jdbc:mysql://mysql:3306/${BUSINESS_MYSQL_DATABASE:-smart_hotel_business}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-      MYSQL_USER: ${BUSINESS_MYSQL_USER:-sh_business_app}
-      MYSQL_PASSWORD: ${BUSINESS_MYSQL_PASSWORD:-}
+      MYSQL_URL: jdbc:mysql://mysql:3306/${ORDER_MYSQL_DATABASE:-smart_hotel_order}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${ORDER_MYSQL_USER:-sh_order_app}
+      MYSQL_PASSWORD: ${ORDER_MYSQL_PASSWORD:-}
       USER_SERVICE_URL: http://user:8081
       HOTEL_SERVICE_URL: http://hotel:8083
-      INVENTORY_MODE: remote
       INVENTORY_SERVICE_URL: http://inventory:8084
+      REVIEW_SERVICE_URL: http://review:8085
+      MARKETING_SERVICE_URL: http://marketing:8086
+      PAYMENT_SERVICE_URL: http://payment:8087
+      STAY_SERVICE_URL: http://stay:8089
+      STATISTICS_SERVICE_URL: http://statistics:8090
     depends_on:
       mysql: {condition: service_healthy}
       redis: {condition: service_healthy}
       user: {condition: service_healthy}
+      hotel: {condition: service_healthy}
       inventory: {condition: service_healthy}
+      marketing: {condition: service_healthy}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8082; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
@@ -101,23 +152,153 @@ services:
       timeout: 5s
       retries: 18
       start_period: 30s
-  hotel:
+  review:
     build:
       context: .
       dockerfile: deploy/Dockerfile
-      args: {MODULE: smarthotel-hotel-service}
+      args: {MODULE: smarthotel-review-service}
     environment:
-      SERVER_ADDRESS: 0.0.0.0
-      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
-      MYSQL_URL: jdbc:mysql://mysql:3306/${HOTEL_MYSQL_DATABASE:-smart_hotel_hotel}?serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${REVIEW_MYSQL_DATABASE:-smart_hotel_review}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${REVIEW_MYSQL_USER:-sh_review_app}
+      MYSQL_PASSWORD: ${REVIEW_MYSQL_PASSWORD:-}
+      USER_SERVICE_URL: http://user:8081
+      HOTEL_SERVICE_URL: http://hotel:8083
       INVENTORY_SERVICE_URL: http://inventory:8084
-      MYSQL_USER: ${HOTEL_MYSQL_USER:-sh_hotel_domain}
-      MYSQL_PASSWORD: ${HOTEL_MYSQL_PASSWORD:-}
+      ORDER_SERVICE_URL: http://order:8082
+      MARKETING_SERVICE_URL: http://marketing:8086
+      PAYMENT_SERVICE_URL: http://payment:8087
+      STAY_SERVICE_URL: http://stay:8089
+      STATISTICS_SERVICE_URL: http://statistics:8090
     depends_on:
       mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      user: {condition: service_healthy}
+      order: {condition: service_healthy}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8083; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8085; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  marketing:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-marketing-service}
+    environment:
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${MARKETING_MYSQL_DATABASE:-smart_hotel_marketing}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${MARKETING_MYSQL_USER:-sh_marketing_app}
+      MYSQL_PASSWORD: ${MARKETING_MYSQL_PASSWORD:-}
+      USER_SERVICE_URL: http://user:8081
+      HOTEL_SERVICE_URL: http://hotel:8083
+      INVENTORY_SERVICE_URL: http://inventory:8084
+      ORDER_SERVICE_URL: http://order:8082
+      REVIEW_SERVICE_URL: http://review:8085
+      PAYMENT_SERVICE_URL: http://payment:8087
+      STAY_SERVICE_URL: http://stay:8089
+      STATISTICS_SERVICE_URL: http://statistics:8090
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8086; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  payment:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-payment-service}
+    environment:
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${PAYMENT_MYSQL_DATABASE:-smart_hotel_payment}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${PAYMENT_MYSQL_USER:-sh_payment_app}
+      MYSQL_PASSWORD: ${PAYMENT_MYSQL_PASSWORD:-}
+      USER_SERVICE_URL: http://user:8081
+      HOTEL_SERVICE_URL: http://hotel:8083
+      INVENTORY_SERVICE_URL: http://inventory:8084
+      ORDER_SERVICE_URL: http://order:8082
+      REVIEW_SERVICE_URL: http://review:8085
+      MARKETING_SERVICE_URL: http://marketing:8086
+      STAY_SERVICE_URL: http://stay:8089
+      STATISTICS_SERVICE_URL: http://statistics:8090
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      user: {condition: service_healthy}
+      order: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8087; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  stay:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-stay-service}
+    environment:
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${STAY_MYSQL_DATABASE:-smart_hotel_stay}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${STAY_MYSQL_USER:-sh_stay_app}
+      MYSQL_PASSWORD: ${STAY_MYSQL_PASSWORD:-}
+      USER_SERVICE_URL: http://user:8081
+      HOTEL_SERVICE_URL: http://hotel:8083
+      INVENTORY_SERVICE_URL: http://inventory:8084
+      ORDER_SERVICE_URL: http://order:8082
+      REVIEW_SERVICE_URL: http://review:8085
+      MARKETING_SERVICE_URL: http://marketing:8086
+      PAYMENT_SERVICE_URL: http://payment:8087
+      STATISTICS_SERVICE_URL: http://statistics:8090
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      user: {condition: service_healthy}
+      order: {condition: service_healthy}
+      hotel: {condition: service_healthy}
+      inventory: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8089; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  statistics:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: {MODULE: smarthotel-statistics-service}
+    environment:
+      <<: *backend-env
+      MYSQL_URL: jdbc:mysql://mysql:3306/${STATISTICS_MYSQL_DATABASE:-smart_hotel_statistics}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      MYSQL_USER: ${STATISTICS_MYSQL_USER:-sh_statistics_app}
+      MYSQL_PASSWORD: ${STATISTICS_MYSQL_PASSWORD:-}
+      USER_SERVICE_URL: http://user:8081
+      HOTEL_SERVICE_URL: http://hotel:8083
+      INVENTORY_SERVICE_URL: http://inventory:8084
+      ORDER_SERVICE_URL: http://order:8082
+      REVIEW_SERVICE_URL: http://review:8085
+      MARKETING_SERVICE_URL: http://marketing:8086
+      PAYMENT_SERVICE_URL: http://payment:8087
+      STAY_SERVICE_URL: http://stay:8089
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      order: {condition: service_healthy}
+      payment: {condition: service_healthy}
+      stay: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8090; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
       interval: 10s
       timeout: 5s
       retries: 18
@@ -129,15 +310,26 @@ services:
       args: {MODULE: smarthotel-gateway}
     environment:
       SERVER_ADDRESS: 0.0.0.0
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx384m -Duser.timezone=Asia/Shanghai
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       USER_SERVICE_URI: http://user:8081
-      BUSINESS_SERVICE_URI: http://business:8082
       HOTEL_SERVICE_URI: http://hotel:8083
+      ORDER_SERVICE_URI: http://order:8082
+      REVIEW_SERVICE_URI: http://review:8085
+      MARKETING_SERVICE_URI: http://marketing:8086
+      PAYMENT_SERVICE_URI: http://payment:8087
+      STAY_SERVICE_URI: http://stay:8089
+      STATISTICS_SERVICE_URI: http://statistics:8090
     ports: ["127.0.0.1:${GATEWAY_PUBLISH_PORT:-8080}:8080"]
     depends_on:
       user: {condition: service_healthy}
-      business: {condition: service_healthy}
       hotel: {condition: service_healthy}
+      order: {condition: service_healthy}
+      review: {condition: service_healthy}
+      marketing: {condition: service_healthy}
+      payment: {condition: service_healthy}
+      stay: {condition: service_healthy}
+      statistics: {condition: service_healthy}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
@@ -157,6 +349,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 volumes:
   mysql-data:
   redis-data:

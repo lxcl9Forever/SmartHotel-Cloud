@@ -1,6 +1,6 @@
 # 完整容器部署
 
-适用于 Docker Engine / Docker Desktop 已运行的环境。保留原来的 Windows Java + Ubuntu 依赖开发方式。五个后端服务通过 Compose 内网 DNS 调用，前端 Nginx 将 `/api/` 转发到网关。
+适用于 Docker Engine / Docker Desktop 已运行的环境。保留原来的 Windows Java + Ubuntu 依赖开发方式。十个后端服务通过 Compose 内网 DNS 调用，前端 Nginx 将 `/api/` 转发到网关。
 
 ## 首次部署
 
@@ -24,7 +24,7 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-初始化入口按顺序完成备份恢复演练、用户分库、库存 TCC 初始化、酒店与库存分库和权限隔离，检测到已有 DB_LAYOUT 会拒绝重复初始化。中途失败保留 `.run/db-backups` 中的私有清单，按失败阶段处理，不能盲目重新执行。
+初始化入口按顺序完成备份恢复演练、用户分库、库存 TCC 初始化、酒店与库存分库、六领域进一步拆分及九域权限隔离，检测到已有 DB_LAYOUT 会拒绝重复初始化。中途失败保留 `.run/db-backups` 中的私有清单，按失败阶段处理，不能盲目重新执行。
 
 打开 `http://127.0.0.1:8088`。刷新 `/home` 等 Vue 路由应继续返回前端页面。访问 `/api/` 使用同一个网页端口。容器内部服务及数据库不向外发布；宿主机数据库、Redis、网关和前端端口默认仅绑定回环地址。
 
@@ -41,7 +41,7 @@ docker compose stop
 
 ## 独立验收
 
-使用全新的 `smarthotel-cloud-verification*` Compose 项目、独立 `.env` 和端口运行，不能连接真实顾客数据库。`scripts/integration_smoke.py` 只接受该测试项目前缀及显式 `--allow-test-data`，通过容器操作员权限生成合成管理员并读取验证码。支付流程明确使用 MOCK，不代表支付宝等外部支付验收通过。
+使用全新的 `smarthotel-cloud-verification*` Compose 项目、独立 `.env` 和端口运行，不能连接真实顾客数据库。`scripts/distributed_smoke.py` 只接受该测试项目前缀及显式 `--allow-test-data`，通过容器操作员权限生成合成管理员并读取验证码。支付流程明确使用 MOCK，不代表支付宝等外部支付验收通过。
 
 
 就绪检查可对当前部署只读运行，必须填写实际 Compose 项目名（可用 `docker compose ls` 查看）：
@@ -53,7 +53,11 @@ python scripts/verify_deployment.py --compose-project <实际项目名> --url ht
 业务及故障验收只对已经初始化的隔离测试目录运行，目录中必须有它自己的 compose.yml、私有 .env 和 scripts。此命令会创建合成账号、订单、付款记录，并依次停止/恢复用户、酒店、库存容器，不能用于真实数据库：
 
 ```powershell
-python scripts/integration_smoke.py --compose-project smarthotel-cloud-verification-<独立编号> --allow-test-data --faults --url http://127.0.0.1:<隔离网页端口>
+python scripts/distributed_smoke.py --compose-project smarthotel-cloud-verification-<独立编号> --allow-test-data --faults --url http://127.0.0.1:<隔离网页端口>
 ```
 
 仅改 Compose 项目名不能隔离显式配置的外部地址，务必使用新目录、新凭据、新发布端口和新数据卷。初始化失败应按私有迁移清单恢复，不要清空已有库后重跑。日常故障不删除数据卷。Nginx 使用 Docker DNS 重新解析网关地址；直接连接断开或响应超时由网关返回 503，客户端先查询原业务结果再决定后续操作。
+
+本版本共十三个容器：十个后端、MySQL、Redis、前端。完整分布式验收会额外验证营销、评价、续住、统计，以及统计停机后的 Outbox 补投。Nacos 可选，默认 Compose 不依赖 Nacos。
+
+优惠协议及名额竞争可在同一隔离项目运行 `python scripts/marketing_smoke.py --compose-project smarthotel-cloud-verification-<编号> --allow-test-data --url http://127.0.0.1:<隔离网页端口>`；脚本使用操作员权限调用测试容器内部接口，仅使用合成数据。四请求竞争检查是正确性验收，不代表吞吐压力测试。

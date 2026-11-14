@@ -1,3 +1,5 @@
+> 此文保留此前单领域分库过程；当前九领域布局和最新回退入口见 [六领域迁移](full-domain-migration.md) 与 [交付状态](delivery-status.md)。
+
 # 用户数据库独立与回退
 
 ## 当前环境
