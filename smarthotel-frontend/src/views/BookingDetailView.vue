@@ -33,7 +33,7 @@
 
           <el-descriptions-item label="订单状态">
             <el-tag>
-              {{ order.orderStatus === 'NO_SHOW' ? '未入住' : order.orderStatus }}
+              {{ orderStatusText[order.orderStatus] || order.orderStatus }}
             </el-tag>
           </el-descriptions-item>
 
@@ -70,7 +70,7 @@
           </el-descriptions-item>
 
           <el-descriptions-item label="支付状态">
-            {{ order.paymentStatus }}
+            {{ paymentStatusText[order.paymentStatus] || order.paymentStatus }}
           </el-descriptions-item>
           <el-descriptions-item v-if="order.orderStatus === 'WAIT_PAY' && order.expireTime" label="支付倒计时">
             <PaymentCountdown :expire-time="order.expireTime" />
@@ -161,13 +161,7 @@
         <div class="actions">
 
 
-          <el-button
-              v-if="order.orderStatus === 'CHECKED_IN' && order.paymentStatus === 'PAID'"
-              type="success"
-              @click="showExtendDialog"
-          >
-            续住
-          </el-button>
+
 
           <el-button
               v-if="order.orderStatus==='CONFIRMED' && order.paymentStatus==='PAID' && Number(order.totalAmount) > 0 && (!order.refundStatus || order.refundStatus==='REJECTED' || order.refundStatus==='REJECT')"
@@ -190,9 +184,11 @@
           <el-button
               v-if="order.orderStatus === 'WAIT_PAY' && !order.processing"
               type="primary"
+              :loading="paying"
+              :disabled="!paymentOptions.available || paying"
               @click="handlePay"
           >
-            {{ alipayEnabled ? '支付宝沙箱支付' : '模拟支付' }}
+            {{ alipayEnabled ? '支付宝沙箱支付' : paymentOptions.mode === 'MOCK' ? '开发模拟支付' : '支付暂不可用' }}
           </el-button>
 
           <el-button
@@ -208,76 +204,14 @@
 
       </el-card>
 
+      <el-alert v-if="order?.orderStatus === 'WAIT_PAY'" :title="paymentOptions.message" :type="paymentOptions.available ? 'info' : 'warning'" :closable="false" style="margin: 16px 0" />
       <CustomerReviewPanel v-if="order" :order-id="order.orderId" :order-status="order.orderStatus" />
 
     </div>
 
   </div>
 
-  <el-dialog
-      v-model="extendVisible"
-      title="续住"
-      width="450px"
-  >
 
-
-    <el-date-picker
-        v-model="newCheckOutDate"
-        type="date"
-        placeholder="选择新的退房日期"
-        :disabled-date="disabledExtendDate"
-        style="width:100%"
-    />
-
-
-    <div
-        v-if="extendPreview"
-        style="margin-top:20px"
-    >
-
-      <p>
-        增加晚数：
-        {{extendPreview.extraNights}} 晚
-      </p>
-
-
-      <p>
-        增加金额：
-        ¥{{extendPreview.extraAmount}}
-      </p>
-
-      <p v-if="!extendPreview.available" style="color:#f56c6c">新增日期库存不足，请选择其他日期</p>
-      <p v-else>确认后将模拟支付续住费用，并更新订单退房日期。</p>
-
-
-    </div>
-
-
-    <template #footer>
-
-
-      <el-button
-          @click="previewExtend"
-      >
-        计算费用
-      </el-button>
-
-
-      <el-button
-          type="success"
-          :loading="extending"
-          :disabled="!extendPreview?.available || extending"
-          @click="confirmExtend"
-      >
-        确认续住并模拟支付
-      </el-button>
-
-
-
-    </template>
-
-
-  </el-dialog>
 
   <el-dialog
       title="申请退款"
@@ -319,7 +253,7 @@
 
 <script setup>
 
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElMessage,
@@ -332,8 +266,8 @@ import {
   mockPayBooking,
   createAlipayPage,
   queryAlipayPayment,
-  previewExtendStay,
-  extendStay
+  getPaymentOptions,
+
 } from '../api/booking'
 
 import request from '../api/request'
@@ -343,18 +277,19 @@ import PaymentCountdown from '../components/PaymentCountdown.vue'
 const route = useRoute()
 const router = useRouter()
 
+const orderStatusText = {WAIT_PAY:'待支付',CONFIRMED:'已确认',CHECKED_IN:'已入住',CHECKED_OUT:'已退房',COMPLETED:'已完成',CANCELLED:'已取消',CLOSED:'已关闭',REFUNDED:'已退款',NO_SHOW:'未入住'}
+const paymentStatusText = {UNPAID:'未支付',PAID:'已支付',REFUNDING:'退款中',REFUNDED:'已退款'}
 const loading = ref(false)
-const alipayEnabled = import.meta.env.VITE_ALIPAY_ENABLED === 'true'
+const paymentOptions = ref({mode: 'NONE', available: false, message: '正在读取支付渠道配置'})
+const alipayEnabled = computed(() => paymentOptions.value.mode === 'ALIPAY_SANDBOX')
+const paying = ref(false)
+const loadPaymentOptions = async () => {
+  try { const { data } = await getPaymentOptions(); paymentOptions.value = data.data }
+  catch (error) { paymentOptions.value = {mode: 'NONE', available: false, message: error.response?.data?.message || '支付配置读取失败，请刷新重试'} }
+}
 const order = ref(null)
 const queryingPayment = ref(false)
 
-const extendVisible = ref(false)
-
-const newCheckOutDate = ref(null)
-
-const extendPreview = ref(null)
-const extending = ref(false)
-watch(newCheckOutDate, () => { extendPreview.value = null })
 
 const refundDialogVisible = ref(false)
 
@@ -437,6 +372,8 @@ const handleCancel = async () => {
 
 
 const handlePay = async () => {
+  if (!paymentOptions.value.available || paying.value || order.value?.processing) return
+
 
   if (alipayEnabled) {
     const paymentWindow = window.open('', '_blank')
@@ -444,8 +381,10 @@ const handlePay = async () => {
       ElMessage.error('浏览器阻止了支付窗口，请允许弹出窗口后重试')
       return
     }
+    paying.value = true
     try {
       const response = await createAlipayPage(order.value.orderId)
+      paymentWindow.opener = null
       paymentWindow.document.open()
       paymentWindow.document.write(response.data.data.formHtml)
       paymentWindow.document.close()
@@ -453,7 +392,7 @@ const handlePay = async () => {
     } catch (error) {
       paymentWindow.close()
       ElMessage.error(error.response?.data?.message || '创建支付宝支付页面失败')
-    }
+    } finally { paying.value = false }
     return
   }
 
@@ -498,6 +437,12 @@ const handleQueryPayment = async () => {
     if (status === 'PAID') {
       ElMessage.success('支付宝付款已确认')
       await loadOrder()
+    } else if (status === 'NEEDS_REVIEW') {
+      ElMessage.warning('渠道已收款，但订单状态已变化，管理员将核对并处理退款')
+      await loadOrder()
+    } else if (status === 'REFUNDED') {
+      ElMessage.success('渠道已确认退款')
+      await loadOrder()
     } else if (status === 'CLOSED') {
       ElMessage.warning('支付宝交易已关闭，请重新发起支付')
     } else {
@@ -508,13 +453,6 @@ const handleQueryPayment = async () => {
   } finally {
     queryingPayment.value = false
   }
-}
-
-const showExtendDialog = ()=>{
-  newCheckOutDate.value = null
-  extendPreview.value = null
-  extendVisible.value = true
-
 }
 
 const formatDate = (date)=>{
@@ -537,53 +475,6 @@ const formatDate = (date)=>{
 
 
   return `${y}-${m}-${d}`
-
-}
-
-const previewExtend = async()=>{
-  if (!newCheckOutDate.value) {
-    ElMessage.warning('请选择新的退房日期')
-    return
-  }
-  try {
-    const res = await previewExtendStay({
-      orderId: order.value.orderId,
-      newCheckOutDate: formatDate(newCheckOutDate.value)
-    })
-    extendPreview.value = res.data.data || res.data
-  } catch(error){
-    ElMessage.error(
-        error.response?.data?.message ||
-        '计算费用失败'
-    )
-
-  }
-
-}
-
-const confirmExtend = async()=>{
-  if (!extendPreview.value?.available || extending.value) return
-  try {
-    extending.value = true
-    const response = await extendStay({
-      orderId: order.value.orderId,
-      newCheckOutDate: formatDate(newCheckOutDate.value)
-    })
-    const result = response.data.data || response.data
-    if (!result.success) throw new Error('续住未完成')
-    ElMessage.success('续住成功，续住费用已模拟支付')
-    extendVisible.value = false
-    await loadOrder()
-  } catch (error) {
-    ElMessage.error(error.response?.data?.message || error.message || '续住失败')
-  } finally {
-    extending.value = false
-  }
-}
-
-const disabledExtendDate = (date)=>{
-
-  return date <= new Date(`${order.value.checkOutDate}T00:00:00`)
 
 }
 
@@ -676,6 +567,7 @@ const submitRefund = async()=>{
 
 }
 
+onMounted(loadPaymentOptions)
 </script>
 
 

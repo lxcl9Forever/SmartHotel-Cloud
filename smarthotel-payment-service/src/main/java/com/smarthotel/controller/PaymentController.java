@@ -19,6 +19,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PaymentController {
     private final AlipayService alipayService;
+    private final com.smarthotel.service.PaymentOptionsService options;
+    @org.springframework.web.bind.annotation.GetMapping("/options")
+    public Result<com.smarthotel.service.PaymentOptionsService.Options> options(){return Result.success(options.options());}
 
     @PostMapping("/create")
     @OperationLog(value = "发起支付宝支付", module = "PAYMENT")

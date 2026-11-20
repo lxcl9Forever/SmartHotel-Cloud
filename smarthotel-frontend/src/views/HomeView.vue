@@ -678,7 +678,7 @@ const useRecommendation = async (result, recommendedRoom, shorterStay) => {
     ? result.budgetAlternative?.shorterCheckOutDate
     : result.checkOutDate
   searchForm.guestCount = result.parsed.people
-  searchForm.roomCount = 1
+  searchForm.roomCount = result.roomCount || 1
   if (!await handleSearch()) return
   const currentRoom = roomTypes.value.find(room => room.roomTypeId === recommendedRoom.roomTypeId)
   if (!currentRoom) {

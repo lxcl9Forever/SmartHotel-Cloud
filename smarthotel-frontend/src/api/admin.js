@@ -104,3 +104,7 @@ export function approveAdminRefund(refundId) {
 export function rejectAdminRefund(refundId) {
     return request.post(`/v1/admin/refund/${refundId}/reject`)
 }
+
+export function getPaymentAudits(){return request.get('/v1/admin/payments/channel-audits')}
+export function reconcilePayment(id){return request.post(`/v1/admin/payments/${id}/reconcile`,null,{timeout:30000})}
+export function refundExceptionPayment(id){return request.post(`/v1/admin/payments/${id}/refund-exception`,null,{timeout:30000})}

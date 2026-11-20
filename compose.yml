@@ -127,6 +127,10 @@ services:
       args: {MODULE: smarthotel-order-service}
     environment:
       <<: *backend-env
+      AI_LLM_ENABLED: ${AI_LLM_ENABLED:-false}
+      AI_LLM_URL: ${AI_LLM_URL:-https://api.deepseek.com/chat/completions}
+      AI_LLM_MODEL: ${AI_LLM_MODEL:-deepseek-flash}
+      AI_LLM_API_KEY: ${AI_LLM_API_KEY:-}
       MYSQL_URL: jdbc:mysql://mysql:3306/${ORDER_MYSQL_DATABASE:-smart_hotel_order}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       MYSQL_USER: ${ORDER_MYSQL_USER:-sh_order_app}
       MYSQL_PASSWORD: ${ORDER_MYSQL_PASSWORD:-}
@@ -217,6 +221,14 @@ services:
       args: {MODULE: smarthotel-payment-service}
     environment:
       <<: *backend-env
+      PAYMENT_MOCK_ENABLED: ${PAYMENT_MOCK_ENABLED:-false}
+      ALIPAY_ENABLED: ${ALIPAY_ENABLED:-false}
+      ALIPAY_GATEWAY: ${ALIPAY_GATEWAY:-https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+      ALIPAY_APP_ID: ${ALIPAY_APP_ID:-}
+      ALIPAY_PRIVATE_KEY_FILE: /run/secrets/alipay/app-private-key.txt
+      ALIPAY_PUBLIC_KEY_FILE: /run/secrets/alipay/alipay-public-key.txt
+      ALIPAY_NOTIFY_URL: ${ALIPAY_NOTIFY_URL:-}
+      ALIPAY_SELLER_ID: ${ALIPAY_SELLER_ID:-}
       MYSQL_URL: jdbc:mysql://mysql:3306/${PAYMENT_MYSQL_DATABASE:-smart_hotel_payment}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       MYSQL_USER: ${PAYMENT_MYSQL_USER:-sh_payment_app}
       MYSQL_PASSWORD: ${PAYMENT_MYSQL_PASSWORD:-}
@@ -233,6 +245,7 @@ services:
       redis: {condition: service_healthy}
       user: {condition: service_healthy}
       order: {condition: service_healthy}
+    volumes: ["${ALIPAY_KEY_DIRECTORY:-./.run/payment-keys}:/run/secrets/alipay:ro"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8087; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]

@@ -58,6 +58,10 @@ python scripts/distributed_smoke.py --compose-project smarthotel-cloud-verificat
 
 仅改 Compose 项目名不能隔离显式配置的外部地址，务必使用新目录、新凭据、新发布端口和新数据卷。初始化失败应按私有迁移清单恢复，不要清空已有库后重跑。日常故障不删除数据卷。Nginx 使用 Docker DNS 重新解析网关地址；直接连接断开或响应超时由网关返回 503，客户端先查询原业务结果再决定后续操作。
 
-本版本共十三个容器：十个后端、MySQL、Redis、前端。完整分布式验收会额外验证营销、评价、续住、统计，以及统计停机后的 Outbox 补投。Nacos 可选，默认 Compose 不依赖 Nacos。
+本版本共十三个容器：十个后端、MySQL、Redis、前端。完整分布式验收会额外验证营销、评价、续住接口下线、统计，以及统计停机后的 Outbox 补投。Nacos 可选，默认 Compose 不依赖 Nacos。
 
 优惠协议及名额竞争可在同一隔离项目运行 `python scripts/marketing_smoke.py --compose-project smarthotel-cloud-verification-<编号> --allow-test-data --url http://127.0.0.1:<隔离网页端口>`；脚本使用操作员权限调用测试容器内部接口，仅使用合成数据。四请求竞争检查是正确性验收，不代表吞吐压力测试。
+
+## 支付与模型 API
+
+MOCK 默认关闭，运行隔离合成数据测试前须在该测试目录 `.env` 显式设置 `PAYMENT_MOCK_ENABLED=true`。支付宝和模型 API 配置、密钥只读挂载与升级步骤见 [支付和 AI 指南](payment-ai-guide.md)。禁止将开发密钥复制到公开镜像。

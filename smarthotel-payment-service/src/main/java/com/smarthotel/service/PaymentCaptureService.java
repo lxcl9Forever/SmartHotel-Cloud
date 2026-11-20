@@ -57,26 +57,27 @@ public class PaymentCaptureService {
         Payment found = paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
                 .eq(Payment::getPaymentNo, paymentNo)
                 .eq(Payment::getPaymentMethod, "ALIPAY"));
-        if (found == null) return false;
+        if (found == null) throw new BusinessException(404,"支付记录不存在");
         // Keep the same lock order as checkout and timeout cancellation: order, then payment.
         BookingOrder order = bookingOrderMapper.selectOne(new LambdaQueryWrapper<BookingOrder>()
                 .eq(BookingOrder::getOrderId, found.getOrderId()).last("FOR UPDATE"));
-        if (order == null) return false;
+        if (order == null) throw new BusinessException(404,"订单不存在");
         Payment payment = paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
                 .eq(Payment::getPaymentId, found.getPaymentId()).last("FOR UPDATE"));
-        if (payment == null) return false;
-        if (payment.getAmount().compareTo(notifiedAmount) != 0) return false;
+        if (payment == null) throw new BusinessException(404,"支付记录不存在");
+        if (notifiedAmount==null||tradeNo==null||tradeNo.isBlank()||payment.getAmount().compareTo(notifiedAmount) != 0) throw new BusinessException(409,"支付金额或流水不匹配");
         if ("SUCCESS".equals(payment.getPaymentStatus())) {
-            return tradeNo.equals(payment.getThirdPartyNo());
+            if(!tradeNo.equals(payment.getThirdPartyNo())) throw new BusinessException(409,"支付流水冲突");
+            return true;
         }
-        if (!"PENDING".equals(payment.getPaymentStatus())) return false;
+        if (!"PENDING".equals(payment.getPaymentStatus())) throw new BusinessException(409,"支付记录已结束");
 
         if (!"WAIT_PAY".equals(order.getOrderStatus())
                 || !"UNPAID".equals(order.getPaymentStatus())
                 || payment.getAmount().compareTo(order.getTotalAmount()) != 0) {
             log.error("Paid Alipay trade {} needs manual reconciliation for order {}",
                     tradeNo, payment.getOrderId());
-            return false;
+            throw new BusinessException(409,"订单状态已变化，渠道收款需核对");
         }
 
         inventoryCommands.confirm(order);

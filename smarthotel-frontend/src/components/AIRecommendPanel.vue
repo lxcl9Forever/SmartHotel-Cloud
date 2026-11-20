@@ -6,16 +6,18 @@
         <p>描述入住人数、天数、预算和偏好，查看符合实际价格与库存的房型。</p>
       </div>
     </div>
+    <el-alert :title="modelStatus.message" :type="modelStatus.available ? 'info' : 'warning'" :closable="false" style="margin-bottom: 12px" />
     <el-input v-model="description" type="textarea" :rows="3" maxlength="500" show-word-limit
       placeholder="例如：一家三口住三晚，预算1000，希望安静" />
     <div class="ai-actions">
       <el-date-picker v-model="checkInDate" type="date" value-format="YYYY-MM-DD"
         placeholder="入住日期（默认明天）" />
-      <el-button type="primary" :loading="loading" @click="recommend">获取推荐</el-button>
+      <span>预订间数</span><el-input-number v-model="roomCount" :min="1" :max="10" />
+      <el-button type="primary" :loading="loading" :disabled="!modelStatus.available" @click="recommend">获取推荐</el-button>
     </div>
     <template v-if="result">
       <p class="ai-summary">
-        {{ result.parsed.people }}人 · {{ result.parsed.days }}晚
+        {{ result.parsed.people }}人 · {{ result.roomCount || 1 }}间 · {{ result.parsed.days }}晚
         <span v-if="result.parsed.budget"> · 预算 ¥{{ result.parsed.budget }}</span>
         · {{ result.checkInDate }} 至 {{ result.checkOutDate }}
         · AI 模型解析
@@ -50,11 +52,14 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { recommendRooms } from '../api/ai'
+import { recommendRooms, getAIStatus } from '../api/ai'
 
 defineEmits(['select'])
+const modelStatus = ref({available: false, message: '正在检查智能选房服务'})
+onMounted(async () => { try { const {data} = await getAIStatus(); modelStatus.value = data.data } catch { modelStatus.value = {available: false, message: '无法获取智能选房服务状态，请稍后刷新'} } })
+const roomCount = ref(1)
 const description = ref('')
 const checkInDate = ref('')
 const loading = ref(false)
@@ -70,6 +75,7 @@ async function recommend() {
   try {
     const { data } = await recommendRooms({
       text: description.value.trim(),
+      roomCount: roomCount.value,
       checkInDate: checkInDate.value || null
     })
     if (data.code !== 200) throw new Error(data.message)

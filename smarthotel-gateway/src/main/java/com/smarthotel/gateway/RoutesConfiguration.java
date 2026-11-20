@@ -9,5 +9,6 @@ import org.springframework.beans.factory.annotation.Value;import org.springframe
  .route("stay",route->route.path("/api/v1/staff/**","/api/v1/customer/stay/**").uri(stay))
  .route("statistics",route->route.path("/api/v1/admin/statistics/**").uri(statistics))
  .route("hotel-read",route->route.method("GET").and().path("/api/v1/room-types","/api/v1/room-types/**","/api/v1/hotel","/api/v1/hotel/room-types/**").uri(hotel))
+ .route("ai",route->route.path("/api/v1/customer/ai/**").metadata("response-timeout",45000L).metadata("connect-timeout",2000).uri(order))
  .route("order",route->route.path("/api/**").uri(order)).build();}
 }

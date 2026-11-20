@@ -39,7 +39,9 @@ import java.util.*;
   }
   private void state(Claim c,com.smarthotel.entity.BookingOrder o) {
     boolean ok=switch(c.action()) {
-      case "MOCK_PAY","PAYMENT_CAPTURE"->"WAIT_PAY".equals(o.getOrderStatus())&&"UNPAID".equals(o.getPaymentStatus())&&o.getExpireTime()!=null&&o.getExpireTime().isAfter(LocalDateTime.now());
+      case "MOCK_PAY"->"WAIT_PAY".equals(o.getOrderStatus())&&"UNPAID".equals(o.getPaymentStatus())&&o.getExpireTime()!=null&&o.getExpireTime().isAfter(LocalDateTime.now());
+      // Verified external receipts may arrive after the deadline while inventory is still held.
+      case "PAYMENT_CAPTURE"->"WAIT_PAY".equals(o.getOrderStatus())&&"UNPAID".equals(o.getPaymentStatus());
       case "REFUND_APPLY"->"CONFIRMED".equals(o.getOrderStatus())&&"PAID".equals(o.getPaymentStatus());
       case "REFUND_APPROVE","REFUND_REJECT"->"CONFIRMED".equals(o.getOrderStatus())&&"REFUNDING".equals(o.getPaymentStatus());
       case "CHECK_IN","NO_SHOW"->"CONFIRMED".equals(o.getOrderStatus())&&"PAID".equals(o.getPaymentStatus());
@@ -59,6 +61,7 @@ import java.util.*;
   @PostMapping("/internal/v1/order-workflows/claim") @Transactional public Claimed claim(@RequestHeader(value="X-Internal-Token",defaultValue="")String token,@RequestBody Claim c) {
     guard.require(token);
     valid(c);
+    if("EXTEND".equals(c.action()))throw new BusinessException(410,"续住功能已下线");
     var o=lock(c.orderId());
     var previous=jdbc.queryForList("SELECT * FROM order_workflow WHERE operation_id=? FOR UPDATE",c.operationId());
     if(!previous.isEmpty()) {

@@ -33,7 +33,15 @@ public class LLMClient {
   private String model;
   @Value("${smarthotel.ai.llm-api-key:}")
   private String apiKey;
+  private final java.util.concurrent.Semaphore inFlight = new java.util.concurrent.Semaphore(4);
+  public record Status(boolean available,String model,String message){}
+  public Status status(){boolean ready=enabled&&StringUtils.hasText(url)&&StringUtils.hasText(model)&&StringUtils.hasText(apiKey);return new Status(ready,ready?model:"",ready?"通过模型 API 理解需求，再核对酒店实时价格与库存":"智能选房 API 尚未配置，请管理员配置模型服务");}
   public Interpretation parse(String text) {
+    if(text==null||text.isBlank()||text.length()>500)throw new BusinessException(400,"请输入不超过500字的入住需求");
+    if(!inFlight.tryAcquire())throw new BusinessException(429,"智能选房请求较多，请稍后重试");
+    try{return parseRemote(text);}finally{inFlight.release();}
+  }
+  private Interpretation parseRemote(String text) {
     if (!enabled || !StringUtils.hasText(url) || !StringUtils.hasText(model)
     || !StringUtils.hasText(apiKey)) {
       throw new BusinessException(503, "智能选房模型尚未配置，请联系管理员检查 DeepSeek 环境变量");
@@ -55,6 +63,9 @@ public class LLMClient {
       HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
       if (response.statusCode() != 200) {
         log.warn("LLM request returned HTTP {}", response.statusCode());
+        if(response.statusCode()==401||response.statusCode()==403)throw new BusinessException(503,"模型 API 凭据无效或没有访问权限，请管理员检查配置");
+        if(response.statusCode()==402)throw new BusinessException(503,"模型 API 额度不足，请管理员检查服务账户");
+        if(response.statusCode()==429)throw new BusinessException(429,"模型 API 当前限流，请稍后重试");
         throw new BusinessException(502, "智能选房模型暂时无法使用，请稍后重试");
       }
       JsonNode root = mapper.readTree(response.body());
@@ -81,6 +92,9 @@ public class LLMClient {
     }
     catch (BusinessException error) {
       throw error;
+    }
+    catch (InterruptedException error) {
+      Thread.currentThread().interrupt();throw new BusinessException(503,"智能选房请求已中断，请稍后重试");
     }
     catch (Exception error) {
       log.warn("LLM parsing unavailable: {}", error.getClass().getSimpleName());

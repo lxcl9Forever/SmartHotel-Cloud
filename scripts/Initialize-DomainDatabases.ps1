@@ -18,4 +18,5 @@ foreach ($scriptName in @('Initialize-HotelRead.ps1','Upgrade-Inventory.ps1','Up
 }
 & (Join-Path $PSScriptRoot 'Split-FullDomains.ps1') @shared -Action Rehearse
 & (Join-Path $PSScriptRoot 'Split-FullDomains.ps1') @shared -Action Migrate
+& (Join-Path $PSScriptRoot 'Upgrade-PaymentAi.ps1') @shared
 Write-Host 'Nine domain databases initialized. Preserve private backups before starting applications.'

@@ -230,13 +230,7 @@
 
             >
               <template #default="{ row }">
-                <el-button
-                    type="primary"
-                    size="small"
-                    @click="openExtend(row)"
-                >
-                  续住
-                </el-button>
+
 
 
                 <el-button
@@ -943,72 +937,7 @@
 
     </el-dialog>
 
-    <el-dialog
-        v-model="extendDialogVisible"
-        title="办理续住"
-        width="450px"
-    >
 
-      <el-form>
-
-        <el-form-item label="当前退房日期">
-
-          {{ selectedOrder?.checkOutDate }}
-
-        </el-form-item>
-
-
-        <el-form-item label="新的退房日期">
-
-          <el-date-picker
-              v-model="extendForm.newCheckOutDate"
-              type="date"
-              placeholder="选择日期"
-              :disabled-date="disabledExtendDate"
-          />
-
-        </el-form-item>
-
-
-      </el-form>
-
-
-      <div v-if="extendPreview">
-
-        <p>
-          增加晚数：
-          {{extendPreview.extraNights}}晚
-        </p>
-
-
-        <p>
-          增加金额：
-          ¥{{extendPreview.extraAmount}}
-        </p>
-
-      </div>
-
-
-      <template #footer>
-
-        <el-button
-            @click="previewExtend"
-        >
-          计算费用
-        </el-button>
-
-
-        <el-button
-            type="success"
-            @click="submitExtend"
-        >
-          确认续住
-        </el-button>
-
-      </template>
-
-
-    </el-dialog>
 
     <!-- 房态变更弹窗 -->
     <el-dialog
@@ -1096,8 +1025,7 @@ import {
   startMaintenance,
   setOutOfService,
   restoreRoom,
-  previewStaffExtend,
-  extendStaff,
+
   completeOrder,
   markOrderNoShow,
   markOverdueNoShows
@@ -1131,18 +1059,6 @@ const dirtyRooms = ref([])
 const cleaningRooms = ref([])
 
 const selectedOrder = ref(null)
-
-const extendDialogVisible = ref(false)
-
-
-const extendPreview = ref(null)
-
-
-const extendForm = reactive({
-
-  newCheckOutDate:null
-
-})
 
 const availableRooms = ref([])
 
@@ -1633,18 +1549,6 @@ const openCheckOut = (order) => {
   checkOutDialogVisible.value = true
 }
 
-const openExtend = (order)=>{
-
-  selectedOrder.value = order
-
-  extendForm.newCheckOutDate = null
-
-  extendPreview.value = null
-
-  extendDialogVisible.value = true
-
-}
-
 const submitCheckOut = async () => {
 
   try {
@@ -1816,58 +1720,6 @@ const loadOutOfServiceRooms = async () => {
   }
 }
 
-const previewExtend = async()=>{
-
-
-  const res =
-      await previewStaffExtend({
-
-        orderId:
-        selectedOrder.value.orderId,
-
-
-        newCheckOutDate:
-            formatDate(
-                extendForm.newCheckOutDate
-            )
-
-      })
-
-
-  extendPreview.value =
-      res.data.data || res.data
-
-}
-
-const submitExtend = async()=>{
-
-
-  await extendStaff({
-
-    orderId:
-    selectedOrder.value.orderId,
-
-
-    newCheckOutDate:
-        formatDate(
-            extendForm.newCheckOutDate
-        )
-
-  })
-
-
-  ElMessage.success(
-      '续住成功'
-  )
-
-
-  extendDialogVisible.value=false
-
-
-  await loadCheckedInOrders()
-
-}
-
 const formatDate=(date)=>{
 
   const y=date.getFullYear()
@@ -1889,16 +1741,6 @@ const formatDate=(date)=>{
 onMounted(() => {
   loadConfirmedOrders()
 })
-
-const disabledExtendDate = (date)=>{
-
-  if(!selectedOrder.value){
-    return false
-  }
-
-  return date <= new Date(selectedOrder.value.checkOutDate)
-
-}
 
 const handleComplete = async(row)=>{
 

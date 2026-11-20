@@ -7,5 +7,5 @@ import java.util.List;
 
 public record AIRecommendationVO(RoomPreference parsed, LocalDate checkInDate,
                                  LocalDate checkOutDate, List<RecommendedRoomVO> recommendations,
-                                 String reply, BudgetAlternativeVO budgetAlternative) {
+                                 String reply, BudgetAlternativeVO budgetAlternative, int roomCount) {
 }

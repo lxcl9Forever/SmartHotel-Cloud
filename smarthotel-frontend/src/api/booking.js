@@ -52,23 +52,5 @@ export function queryAlipayPayment(orderId) {
     })
 }
 
-export function previewExtendStay(data){
 
-    return request({
-        url:'/v1/customer/stay/preview',
-        method:'post',
-        data
-    })
-
-}
-
-
-export function extendStay(data){
-
-    return request({
-        url:'/v1/customer/stay/extend',
-        method:'post',
-        data
-    })
-
-}
+export function getPaymentOptions(){return request({url:'/v1/payment/options',method:'get'})}

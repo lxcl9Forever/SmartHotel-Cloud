@@ -6,6 +6,7 @@ $runDir=Join-Path $projectRoot '.run'
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 $pidFile=Join-Path $runDir 'processes.json'
 if (Test-Path -LiteralPath $pidFile) { throw 'A project run record exists. Stop-Cloud.ps1 before starting again.' }
+if ($env:PAYMENT_AI_LAYOUT -ne 'enabled') { throw 'Run scripts/Upgrade-PaymentAi.ps1 with Java stopped before starting this version.' }
 if ($env:FULL_DOMAIN_LAYOUT -ne 'split') { throw 'Complete Split-FullDomains.ps1 rehearsal and migration before starting the nine-domain layout.' }
 if ($env:INVENTORY_DATA_LAYOUT -ne 'split' -or $env:HOTEL_DATA_LAYOUT -ne 'split') { throw 'Independent hotel and inventory schemas are required.' }
 $roles=@('USER','HOTEL','INVENTORY','ORDER','REVIEW','MARKETING','PAYMENT','STAY','STATISTICS')

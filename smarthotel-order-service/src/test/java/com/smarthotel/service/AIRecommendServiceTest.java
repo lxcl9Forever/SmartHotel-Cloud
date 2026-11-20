@@ -139,4 +139,14 @@ class AIRecommendServiceTest {
         assertTrue(lowerBudget.reply().contains("仍比预算多¥150"));
         verify(catalog, times(2)).priceIndex(List.of(8L, 7L), checkIn, checkIn.plusDays(2));
     }
+    @Test void multiRoomQuoteUsesCapacityStockAndTotalBudget(){
+        var day=LocalDate.now().plusDays(1);when(llm.parse(any())).thenReturn(new LLMClient.Interpretation(new RoomPreference(4,1,new BigDecimal("700"),"","LLM"),"您好，很高兴为您挑选。"));
+        var room=new RoomType();room.setRoomTypeId(1L);room.setTypeName("双人房");room.setMaxGuests(2);when(catalog.activeTypes()).thenReturn(List.of(room));
+        var stock=new RoomInventory();stock.setTotalQty(3);stock.setLockedQty(0);stock.setSoldQty(0);when(inventory.query(any(),any(),any())).thenReturn(List.of(stock));
+        var price=new RoomPrice();price.setSalePrice(new BigDecimal("300"));when(catalog.priceIndex(any(),any(),any())).thenReturn(Map.of(1L,List.of(price)));
+        when(promotions.calculate(any())).thenAnswer(call->{BigDecimal amount=call.getArgument(0);return new PromotionService.Price(null,amount,BigDecimal.ZERO,amount);});
+        var request=new RecommendRequest();request.setText("四人住一晚");request.setRoomCount(2);request.setCheckInDate(day);
+        var result=service.recommend(request);assertEquals(2,result.roomCount());assertEquals(new BigDecimal("600"),result.recommendations().get(0).totalAmount());
+        stock.setTotalQty(1);assertTrue(service.recommend(request).recommendations().isEmpty());
+    }
 }

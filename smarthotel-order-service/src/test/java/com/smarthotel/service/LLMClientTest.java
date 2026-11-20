@@ -59,4 +59,6 @@ class LLMClientTest {
         });
         assertThrows(BusinessException.class, () -> client.parse("两人住一晚"));
     }
+    @Test void authenticationFailureExplainsConfigurationInsteadOfFakingRecommendation(){server.createContext("/chat/completions",exchange->{exchange.getRequestBody().readAllBytes();exchange.sendResponseHeaders(401,-1);exchange.close();});assertTrue(assertThrows(BusinessException.class,()->client.parse("两人住一晚")).getMessage().contains("凭据"));}
+    @Test void blankAndOversizedInputNeverCallsProvider(){assertThrows(BusinessException.class,()->client.parse(" "));assertThrows(BusinessException.class,()->client.parse("a".repeat(501)));}
 }

@@ -14,7 +14,7 @@
 | review-service | 评价与审核、房型评分 | 8085 | smart_hotel_review |
 | marketing-service | 促销、签到券、每日优惠、额度预留 | 8086 | smart_hotel_marketing |
 | payment-service | MOCK/支付宝适配、支付记录、退款审核与流水 | 8087 | smart_hotel_payment |
-| stay-service | 实体客房、房态、入住续住退房、清洁 | 8089 | smart_hotel_stay |
+| stay-service | 实体客房、房态、入住退房、清洁 | 8089 | smart_hotel_stay |
 | statistics-service | 运营读模型和日报 | 8090 | smart_hotel_statistics |
 
 8088 留给可选 Nacos 控制台。common 只提供接口模型和基础组件；integration 提供内部调用、事务事件与协调基础设施，不包含业务 Mapper。不同领域账号不能查询彼此的主表；需要列表关联的服务维护自己的只读投影。当前九个 schema 位于同一 MySQL 实例，各服务可配置独立连接。
@@ -22,9 +22,12 @@
 ## 分布式设计
 
 - 库存和营销预留采用持久 Try / Confirm / Cancel；异常结果不猜测回滚，恢复任务依据订单事实决议。
-- 支付、退款、入住和续住在所属服务提交，通过订单所有者的持久工作流更新权威订单状态。操作未决时订单被占用，禁止并发取消覆盖付款结果；重试使用已记录结果。
+- 支付、退款、入住和退房在所属服务提交，通过订单所有者的持久工作流更新权威订单状态。操作未决时订单被占用，禁止并发取消覆盖付款结果；重试使用已记录结果。
 - 本地业务写入与 Outbox 在同一事务提交。HTTP 投递、Inbox 去重、聚合版本、删除墓碑和重试/重放使读模型最终一致。这里使用事务 HTTP Outbox，未将 RabbitMQ 当作必需事件总线。
-- 续住保留原项目 MOCK 费用规则；外部支付宝与 AI 默认关闭。模拟记录不代表第三方真实交易成功。
+- 续住功能已下线，历史费用和已存在的持久工作流保留兼容处理。支付宝沙箱通过签名、主动查单及异常收款对账确认结果；模拟支付仅在显式测试开关下可用。
+- 智能选房调用模型 API 理解需求，由酒店、库存和营销服务核实报价、余量及多间房预算；外部服务不可用时返回具体失败原因。
+
+配置、数据库升级和完整测试步骤见 [支付宝沙箱与智能选房](docs/payment-ai-guide.md)。
 
 实现和故障示例见 [领域拆分与一致性](docs/full-domain-architecture.md)、[订单协调](docs/order-service-boundary.md)、[验收范围](docs/delivery-status.md)。
 

@@ -126,27 +126,6 @@ export function restoreRoom(roomId, reason) {
     })
 }
 
-export function previewStaffExtend(data){
-
-    return request({
-        url:'/v1/staff/stay/preview',
-        method:'post',
-        data
-    })
-
-}
-
-
-export function extendStaff(data){
-
-    return request({
-        url:'/v1/staff/stay/extend',
-        method:'post',
-        data
-    })
-
-}
-
 export function getCheckedOutOrders(){
 
     return request({

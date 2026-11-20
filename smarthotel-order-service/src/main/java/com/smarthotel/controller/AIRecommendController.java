@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AIRecommendController {
     private final AIRecommendService service;
+    private final com.smarthotel.service.LLMClient model;
+    @org.springframework.web.bind.annotation.GetMapping("/status")
+    public Result<com.smarthotel.service.LLMClient.Status> status(){return Result.success(model.status());}
 
     @PostMapping("/recommend")
     public Result<AIRecommendationVO> recommend(@Valid @RequestBody RecommendRequest request) {

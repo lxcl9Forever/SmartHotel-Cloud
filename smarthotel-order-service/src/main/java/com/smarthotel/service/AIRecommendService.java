@@ -33,6 +33,8 @@ public class AIRecommendService {
     private final PromotionService promotionService;
 
     public AIRecommendationVO recommend(RecommendRequest request) {
+        int roomCount = request.getRoomCount() == null ? 1 : request.getRoomCount();
+        if(roomCount<1 || roomCount>10)throw new BusinessException(400,"预订间数应为1至10间");
         LLMClient.Interpretation interpretation = llmClient.parse(request.getText());
         RoomPreference preference = interpretation.preference();
         LocalDate checkIn = request.getCheckInDate() == null
@@ -45,22 +47,22 @@ public class AIRecommendService {
 
         var nightlyPrices=catalog.priceIndex(roomTypes.stream().map(RoomType::getRoomTypeId).toList(),checkIn,checkOut);
         for (RoomType room : roomTypes) {
-            if (room.getMaxGuests() == null || room.getMaxGuests() < preference.people()) continue;
+            if (room.getMaxGuests() == null || room.getMaxGuests() * roomCount < preference.people()) continue;
             List<RoomInventory> inventory = inventoryMapper.query(room.getRoomTypeId(),checkIn,checkOut);
             if (inventory.size() != preference.days()) continue;
             int available = inventory.stream().mapToInt(day -> day.getTotalQty()
                     - day.getLockedQty() - day.getSoldQty()).min().orElse(0);
-            if (available < 1) continue;
+            if (available < roomCount) continue;
             List<RoomPrice> prices = nightlyPrices.getOrDefault(room.getRoomTypeId(),List.of());
             if (prices.size() != preference.days()) continue;
             BigDecimal original = prices.stream().map(RoomPrice::getSalePrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal total = promotionService.calculate(original).payableAmount();
+            BigDecimal total = promotionService.calculate(original.multiply(BigDecimal.valueOf(roomCount))).payableAmount();
 
             BigDecimal rating = ratingMapper.averageRating(room.getRoomTypeId());
             boolean preferenceMatched = matchesPreference(room, preference.preference());
             String reason = "适合" + preference.people() + "人入住，" + preference.days()
-                    + "晚约¥" + total + "，当前至少有" + available + "间可售"
+                    + "晚、" + roomCount + "间合计¥" + total + "，当前至少有" + available + "间可售"
                     + (rating == null ? "" : "，评价均分" + rating.setScale(1, RoundingMode.HALF_UP))
                     + (preference.preference().isBlank() ? "。"
                     : preferenceMatched ? "，符合“" + preference.preference() + "”偏好。"
@@ -74,7 +76,7 @@ public class AIRecommendService {
                 if (preference.days() > 1) {
                     BigDecimal shorterOriginal = prices.stream().limit(preference.days() - 1L)
                             .map(RoomPrice::getSalePrice).reduce(BigDecimal.ZERO, BigDecimal::add);
-                    shorterTotal = promotionService.calculate(shorterOriginal).payableAmount();
+                    shorterTotal = promotionService.calculate(shorterOriginal.multiply(BigDecimal.valueOf(roomCount))).payableAmount();
                 }
                 overBudget.add(new BudgetOption(scored, shorterTotal));
             } else {
@@ -119,7 +121,7 @@ public class AIRecommendService {
                     + "请尝试调整入住日期或人数。";
         }
         return new AIRecommendationVO(preference, checkIn, checkOut,
-                recommendations, interpretation.greeting() + " " + reply, alternative);
+                recommendations, interpretation.greeting() + " " + reply, alternative, roomCount);
     }
 
     private boolean matchesPreference(RoomType room, String preference) {

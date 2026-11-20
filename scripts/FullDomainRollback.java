@@ -39,7 +39,9 @@ class FullDomainRollback {
       String db=d.getValue();
       if(t.number("SELECT COUNT(*) FROM "+DbSplit.full(db,"domain_outbox")+" WHERE status<>'DELIVERED'")!=0||t.number("SELECT COUNT(*) FROM "+DbSplit.full(db,"domain_workflow")+" WHERE status IN ('INTENT','COMMITTED','ABORTING')")!=0)throw new IllegalStateException("Resolve pending workflows and event deliveries before rollback: "+d.getKey());
     }
-    String orders=domains.get("order");
+    String paymentDb=domains.get("payment");
+  if(t.tables(paymentDb).contains("payment_channel_audit")&&t.number("SELECT COUNT(*) FROM "+DbSplit.full(paymentDb,"payment_channel_audit")+" WHERE needs_attention=1")!=0)throw new IllegalStateException("Resolve channel payment exceptions before legacy rollback export");
+  String orders=domains.get("order");
     if(t.number("SELECT COUNT(*) FROM "+DbSplit.full(orders,"inventory_tcc_journal")+" WHERE state='PENDING'")!=0||t.number("SELECT COUNT(*) FROM "+DbSplit.full(orders,"marketing_tcc_journal")+" WHERE done=0")!=0||t.number("SELECT COUNT(*) FROM "+DbSplit.full(orders,"order_workflow")+" WHERE status='ACTIVE'")!=0)throw new IllegalStateException("Resolve authoritative pending decisions before rollback");
     Files.copy(t.root.resolve(".env"),t.output.resolve("env-before-rollback-export.private"));
     String suffix=UUID.randomUUID().toString().substring(0,8);

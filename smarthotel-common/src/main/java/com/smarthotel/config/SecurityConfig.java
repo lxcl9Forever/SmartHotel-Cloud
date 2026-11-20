@@ -45,6 +45,8 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/api/v1/payment/notify")
                         .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/payment/options")
+                        .hasRole("CUSTOMER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/payment/create")
                         .hasRole("CUSTOMER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/payment/query")

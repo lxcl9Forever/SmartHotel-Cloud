@@ -1,15 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import LoginView from '../views/LoginView.vue'
-import HomeView from '../views/HomeView.vue'
-import BookingDetailView from '../views/BookingDetailView.vue'
-import MyBookingsView from '../views/MyBookingsView.vue'
-import StaffDashboardView from '../views/StaffDashboardView.vue'
-import AdminDashboardView from '../views/AdminDashboardView.vue'
-import RegisterView from '../views/RegisterView.vue'
-import ProfileView from '../views/ProfileView.vue'
-import DailyDealsView from '../views/DailyDealsView.vue'
-import ForgotPasswordView from '../views/ForgotPasswordView.vue'
+const LoginView = () => import('../views/LoginView.vue')
+const HomeView = () => import('../views/HomeView.vue')
+const BookingDetailView = () => import('../views/BookingDetailView.vue')
+const MyBookingsView = () => import('../views/MyBookingsView.vue')
+const StaffDashboardView = () => import('../views/StaffDashboardView.vue')
+const AdminDashboardView = () => import('../views/AdminDashboardView.vue')
+const RegisterView = () => import('../views/RegisterView.vue')
+const ProfileView = () => import('../views/ProfileView.vue')
+const DailyDealsView = () => import('../views/DailyDealsView.vue')
+const ForgotPasswordView = () => import('../views/ForgotPasswordView.vue')
 
 const routes = [
     {

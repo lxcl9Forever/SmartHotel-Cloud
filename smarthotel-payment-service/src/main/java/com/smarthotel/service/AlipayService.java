@@ -43,6 +43,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -57,6 +58,7 @@ public class AlipayService {
     private final PaymentMapper paymentMapper;
     private final DailyCheckinService dailyCheckinService;
     private final PaymentCaptureService captures;
+    @org.springframework.beans.factory.annotation.Autowired private org.springframework.beans.factory.ObjectProvider<AlipaySettlementService> settlements;
     @org.springframework.beans.factory.annotation.Autowired private com.smarthotel.service.OrderProjectionRefresh refresh;
 
     @Transactional
@@ -105,7 +107,8 @@ public class AlipayService {
                     "out_trade_no", payment.getPaymentNo(),
                     "total_amount", payment.getAmount().toPlainString(),
                     "subject", "SmartHotel订单" + order.getOrderNo(),
-                    "product_code", "FAST_INSTANT_TRADE_PAY")));
+                    "product_code", "FAST_INSTANT_TRADE_PAY",
+                    "time_expire", order.getExpireTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))));
             AlipayTradePagePayResponse response = client().pageExecute(request);
             if (!StringUtils.hasText(response.getBody())) {
                 throw new BusinessException(502, "支付宝未返回支付页面");
@@ -133,7 +136,8 @@ public class AlipayService {
         } catch (RuntimeException error) {
             return false;
         }
-        return captures.capture(params.get("out_trade_no"), params.get("trade_no"), notifiedAmount);
+        try { String status=settlements.getObject().accept(params.get("out_trade_no"),params.get("trade_no"),notifiedAmount);return java.util.Set.of("PAID","NEEDS_REVIEW","REFUNDED").contains(status); }
+        catch(BusinessException pending){return false;}
     }
 
     /** 本地沙箱联调无需公网回调；仅以支付宝服务端交易查询结果确认付款。 */
@@ -155,57 +159,18 @@ public class AlipayService {
                 .orderByDesc(Payment::getPaymentId)
                 .last("LIMIT 1"));
         if (payment == null) throw new BusinessException(409, "请先发起支付宝沙箱支付");
-        if ("SUCCESS".equals(payment.getPaymentStatus()) && "PAID".equals(ownedOrder.getPaymentStatus())) {
-            return "PAID";
-        }
-        if ("FAILED".equals(payment.getPaymentStatus())) return "CLOSED";
+        return settlements.getObject().reconcile(payment.getPaymentId());
+    }
 
-        AlipayTradeQueryRequest request = new AlipayTradeQueryRequest();
-        try {
-            request.setBizContent(objectMapper.writeValueAsString(Map.of(
-                    "out_trade_no", payment.getPaymentNo())));
-            AlipayTradeQueryResponse response = client().execute(request);
-            if (!response.isSuccess()) {
-                if ("ACQ.TRADE_NOT_EXIST".equals(response.getSubCode())) return "PENDING";
-                log.warn("Alipay query failed for order {}: {}", orderId, response.getSubCode());
-                throw new BusinessException(502, "支付宝交易查询失败，请稍后重试");
-            }
-            if (!payment.getPaymentNo().equals(response.getOutTradeNo())) {
-                throw new BusinessException(502, "支付宝返回的交易订单号不匹配");
-            }
-            String tradeStatus = response.getTradeStatus();
-            if ("WAIT_BUYER_PAY".equals(tradeStatus)) return "PENDING";
-            if ("TRADE_CLOSED".equals(tradeStatus)) {
-                paymentMapper.update(null, new LambdaUpdateWrapper<Payment>()
-                        .eq(Payment::getPaymentId, payment.getPaymentId())
-                        .eq(Payment::getPaymentStatus, "PENDING")
-                        .set(Payment::getPaymentStatus, "FAILED"));
-                return "CLOSED";
-            }
-            if (!"TRADE_SUCCESS".equals(tradeStatus) && !"TRADE_FINISHED".equals(tradeStatus)) {
-                return "PENDING";
-            }
-            if (!StringUtils.hasText(response.getTradeNo())) {
-                throw new BusinessException(502, "支付宝未返回交易流水号");
-            }
-            BigDecimal amount;
-            try {
-                amount = new BigDecimal(response.getTotalAmount());
-            } catch (RuntimeException error) {
-                throw new BusinessException(502, "支付宝返回的交易金额无效");
-            }
-            if (!captures.capture(payment.getPaymentNo(), response.getTradeNo(), amount)) {
-                throw new BusinessException(409, "订单已取消或状态异常，请联系管理员核对支付记录");
-            }
-            return "PAID";
-        } catch (JsonProcessingException | AlipayApiException error) {
-            log.error("Could not query sandbox trade for order {}", orderId, error);
-            if (error instanceof AlipayApiException && error.getMessage() != null
-                    && error.getMessage().contains("当前配置的支付宝公钥为应用公钥")) {
-                throw new BusinessException(502, "支付宝公钥配置错误：请将 ALIPAY_PUBLIC_KEY_FILE 指向沙箱应用的支付宝公钥文件");
-            }
-            throw new BusinessException(502, "支付宝交易查询失败，请稍后重试");
-        }
+    com.alipay.api.response.AlipayTradeQueryResponse queryTrade(Payment payment){
+        requireConfigured();var request=new AlipayTradeQueryRequest();
+        try{request.setBizContent(objectMapper.writeValueAsString(Map.of("out_trade_no",payment.getPaymentNo())));return client().execute(request);}
+        catch(JsonProcessingException|AlipayApiException error){throw new BusinessException(502,"支付宝交易查询失败，请检查沙箱配置或稍后重试");}
+    }
+    boolean closeTrade(Payment payment){
+        requireConfigured();var request=new com.alipay.api.request.AlipayTradeCloseRequest();
+        try{request.setBizContent(objectMapper.writeValueAsString(Map.of("out_trade_no",payment.getPaymentNo())));var response=client().execute(request);return response.isSuccess()||Set.of("ACQ.TRADE_NOT_EXIST","ACQ.TRADE_HAS_CLOSE").contains(String.valueOf(response.getSubCode()));}
+        catch(JsonProcessingException|AlipayApiException error){throw new BusinessException(502,"支付宝关单结果暂时无法确认");}
     }
 
     /** Use one stable request number per refund so a retry cannot create a second refund. */
@@ -313,9 +278,8 @@ public class AlipayService {
     }
 
     AlipayClient client() {
-        return new DefaultAlipayClient(config.getGateway(), config.getAppId(),
-                readKey(config.getPrivateKeyFile(), "应用私钥"), "json", "UTF-8",
-                readKey(config.getPublicKeyFile(), "支付宝公钥"), "RSA2");
+        var sdk=new com.alipay.api.AlipayConfig();sdk.setServerUrl(config.getGateway());sdk.setAppId(config.getAppId());sdk.setPrivateKey(readKey(config.getPrivateKeyFile(),"应用私钥"));sdk.setAlipayPublicKey(readKey(config.getPublicKeyFile(),"支付宝公钥"));sdk.setFormat("json");sdk.setCharset("UTF-8");sdk.setSignType("RSA2");sdk.setConnectTimeout(3000);sdk.setReadTimeout(8000);
+        try{return new DefaultAlipayClient(sdk);}catch(AlipayApiException invalid){throw new BusinessException(503,"支付宝沙箱密钥配置无效");}
     }
 
     private String readKey(String filename, String keyName) {
@@ -342,7 +306,7 @@ public class AlipayService {
         } catch (RuntimeException error) {
             throw new BusinessException(503, "支付宝沙箱网关地址无效");
         }
-        if (host == null || !host.endsWith(".alipaydev.com")) {
+        if (host == null || !host.endsWith(".alipaydev.com") || !"https".equalsIgnoreCase(URI.create(config.getGateway()).getScheme())) {
             throw new BusinessException(503, "仅允许支付宝沙箱网关");
         }
     }
